@@ -20,13 +20,21 @@ import time
 
 log = logging.getLogger(__name__)
 
-FLIPPER_DEGREES = 90
+# negative moves to init position
+# positive moves towards camera
+# This should be 90 degrees but 110 is needed to account for play between the gears
+FLIPPER_DEGREES = 110
 FLIPPER_SPEED = 200
 
+# negative move counter clockwise (viewed from above)
+# positive move clockwise (viewed from above)
 TURNTABLE_DEGREES = 150
 TURNTABLE_SPEED = 200
 
-ELEVATOR_SPEED = 200
+# negative moves down
+# positive moves up
+ELEVATOR_SPEED_UP = 200
+ELEVATOR_SPEED_DOWN = 50
 
 
 class CraneCuber(object):
@@ -56,12 +64,14 @@ class CraneCuber(object):
         self.init_motors()
         self.center_pixels = []
 
+        '''
         calibrate_filename = '/tmp/MINDCUB3R-usb-camera.json'
         with open(calibrate_filename, 'r') as fh:
             for square in json.load(fh):
                 self.center_pixels.append((square.get('x'), square.get('y')))
 
         log.info("center_pixels\n%s" % pformat(self.center_pixels))
+        '''
 
     def init_motors(self):
 
@@ -74,14 +84,12 @@ class CraneCuber(object):
         # 'brake' stops but doesn't hold the motor in place
         # 'hold' stops and holds the motor in place
         log.info("Initialize elevator %s" % self.elevator)
-        self.elevator.run_forever(speed_sp=50, stop_action='brake')
-        self.elevator.wait_for_stop()
-        self.elevator.stop()
         self.elevator.reset()
         self.elevator.stop(stop_action='brake')
 
         log.info("Initialize flipper %s" % self.flipper)
-        self.flipper.run_forever(speed_sp=50, stop_action='hold')
+        self.flipper.run_forever(speed_sp=-60, stop_action='hold')
+        self.flipper.wait_for_running()
         self.flipper.wait_for_stop()
         self.flipper.stop()
         self.flipper.reset()
@@ -114,10 +122,17 @@ class CraneCuber(object):
         self.shutdown_robot()
 
     def wait_for_touch_sensor(self):
+        log.info('waiting for TouchSensor press')
 
         while True:
-            if self.shutdown or self.touch_sensor.is_pressed:
+            if self.shutdown:
                 break
+
+            if self.touch_sensor.is_pressed:
+                log.info('TouchSensor pressed')
+                break
+
+            sleep(0.01)
 
     def rotate(self, clockwise, quarter_turns):
 
@@ -133,7 +148,7 @@ class CraneCuber(object):
 
         current_pos = self.turntable.position
         final_pos = current_pos + degrees
-        log.info("rotate_cube() %d quarter turns, direction %s, current_pos %d, final_pos %d" % (quarter_turns, direction, current_pos, final_pos))
+        log.info("rotate_cube() %d quarter turns, clockwise %s, current_pos %d, final_pos %d" % (quarter_turns, clockwise, current_pos, final_pos))
 
         self.turntable.run_to_abs_pos(position_sp=final_pos,
                                       speed_sp=TURNTABLE_SPEED,
@@ -185,7 +200,7 @@ class CraneCuber(object):
         self.flipper.run_to_abs_pos(position_sp=final_pos,
                                     speed_sp=FLIPPER_SPEED)
         self.flipper.wait_for_running()
-        self.flipper.wait_for_position(pos)
+        self.flipper.wait_for_position(final_pos)
         self.flipper.wait_for_stop()
         self.flipper_at_init = not self.flipper_at_init
 
@@ -245,23 +260,33 @@ class CraneCuber(object):
 
         if rows:
             # TODO - double check this
-            flipper_plus_holder_height_studs = 13
-            flipper_plus_holder_height_studs_mm =  flipper_plus_holder_height_studs * 8
+            mm_per_stud = 8
+            flipper_plus_holder_height_studs = 16
+            flipper_plus_holder_height_studs_mm =  flipper_plus_holder_height_studs * mm_per_stud
             mm_per_groove = float(32/9) # 4 stud gear rack is 32mm long and has 9 grooves
-            to_top_holder_mm = flipper_plus_holder_height_studs_mm - self.size_mm
-            final_pos_mm = to_top_holder_mm + int(rows * self.square_size_mm)
+            # to_top_holder_mm = flipper_plus_holder_height_studs_mm - self.size_mm
+            # dwalton
+            final_pos_mm = flipper_plus_holder_height_studs_mm - int((3 - rows) * self.square_size_mm)
 
             degrees_per_groove = 15 # 360/24
             final_pos_grooves = float(final_pos_mm/mm_per_groove)
             final_pos = int(final_pos_grooves * degrees_per_groove)
+
+            log.info("elevate %d rows, flipper_plus_holder_height_studs_mm %s, mm_per_groove %s, final_pos_mm %s, final_pos_grooves %s, final_pos %s" % (rows, flipper_plus_holder_height_studs_mm, mm_per_groove, final_pos_mm, final_pos_grooves, final_pos))
         else:
             final_pos = 0
 
         log.info("elevate() to final_pos %d" % final_pos)
-        self.elevator.run_to_abs_pos(position_sp=final_pos,
-                                     speed_sp=ELEVATOR_SPEED)
+
+        if rows < self.rows_in_turntable:
+            self.elevator.run_to_abs_pos(position_sp=final_pos,
+                                         speed_sp=ELEVATOR_SPEED_DOWN)
+        else:
+            self.elevator.run_to_abs_pos(position_sp=final_pos,
+                                         speed_sp=ELEVATOR_SPEED_UP)
+
         self.elevator.wait_for_running()
-        self.elevator.wait_for_position(pos)
+        self.elevator.wait_for_position(final_pos)
         self.elevator.wait_for_stop()
         self.rows_in_turntable = rows
 
@@ -562,6 +587,84 @@ class CraneCuber(object):
             self.rotate(clockwise, quarter_turns)
             log.info("\n")
 
+    def test(self):
+        """
+        Test the three motors
+        """
+        '''
+        input('Press ENTER to flip (to forward)')
+        self.flip()
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER to flip (to init)')
+        self.flip()
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER rotate 90 degrees clockwise')
+        self.rotate(clockwise=True, quarter_turns=1)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER rotate 90 degrees counter clockwise')
+        self.rotate(clockwise=False, quarter_turns=1)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER rotate 180 degrees clockwise')
+        self.rotate(clockwise=True, quarter_turns=2)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER rotate 180 degrees counter clockwise')
+        self.rotate(clockwise=False, quarter_turns=2)
+
+        if self.shutdown:
+            return
+        '''
+        # dwalton
+        input('Press ENTER elevate to 3 rows')
+        self.elevate(3)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to lower')
+        self.elevate(0)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to 2 rows')
+        self.elevate(2)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to 3 rows')
+        self.elevate(3)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to 2 rows')
+        self.elevate(2)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to lower')
+        self.elevate(0)
+
+        if self.shutdown:
+            return
+
 
 if __name__ == '__main__':
 
@@ -578,8 +681,9 @@ if __name__ == '__main__':
 
     try:
         # cc.wait_for_touch_sensor()
-        cc.scan()
-        cc.resolve()
+        cc.test()
+        #cc.scan()
+        #cc.resolve()
         cc.shutdown_robot()
 
     except Exception as e:
