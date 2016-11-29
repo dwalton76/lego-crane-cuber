@@ -7,6 +7,7 @@ A Rubiks cube solving robot made from EV3 + 42009
 
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, InfraredSensor, TouchSensor
 from ev3dev.helper import LargeMotor, MediumMotor, ColorSensor, MotorStall
+from math import pi
 from pprint import pformat
 from rubiks_rgb_solver import RubiksColorSolver
 from subprocess import check_output
@@ -26,15 +27,24 @@ log = logging.getLogger(__name__)
 FLIPPER_DEGREES = 110
 FLIPPER_SPEED = 200
 
-# negative move counter clockwise (viewed from above)
-# positive move clockwise (viewed from above)
-TURNTABLE_DEGREES = 150
+# The gear ratio is 1:2.333
+# The follower gear rotates 0.428633 time per each revolution of the driver gear
+# We need the follower gear to rotate 90 degrees so 90/0.428633 = 209.96
+#
+# negative moves counter clockwise (viewed from above)
+# positive moves clockwise (viewed from above)
+TURNTABLE_TURN_DEGREES = 210
 TURNTABLE_SPEED = 200
+
+# These numbers are for a 57mm 3x3x3 cube...need to calc these dynamically
+TURNTABLE_TOUCH_DEGREES = 105
+TURNTABLE_SQUARE_CUBE_DEGREES = -145
+TURNTABLE_SQUARE_TT_DEGREES = 40
 
 # negative moves down
 # positive moves up
 ELEVATOR_SPEED_UP = 200
-ELEVATOR_SPEED_DOWN = 50
+ELEVATOR_SPEED_DOWN = 200
 
 
 class CraneCuber(object):
@@ -110,6 +120,8 @@ class CraneCuber(object):
         for x in self.motors:
             x.shutdown = True
 
+        self.elevate(0)
+
         for x in self.motors:
             x.stop(stop_action='brake')
 
@@ -134,22 +146,7 @@ class CraneCuber(object):
 
             sleep(0.01)
 
-    def rotate(self, clockwise, quarter_turns):
-
-        if self.shutdown:
-            return
-
-        assert quarter_turns > 0 and quarter_turns <= 2, "quarater_turns is %d, it must be between 0 and 2" % quarter_turns
-
-        if clockwise:
-            degrees = TURNTABLE_DEGREES * quarter_turns
-        else:
-            degrees = TURNTABLE_DEGREES * quarter_turns * -1
-
-        current_pos = self.turntable.position
-        final_pos = current_pos + degrees
-        log.info("rotate_cube() %d quarter turns, clockwise %s, current_pos %d, final_pos %d" % (quarter_turns, clockwise, current_pos, final_pos))
-
+    def _rotate(self, final_pos):
         self.turntable.run_to_abs_pos(position_sp=final_pos,
                                       speed_sp=TURNTABLE_SPEED,
                                       stop_action='hold',
@@ -157,6 +154,32 @@ class CraneCuber(object):
         self.turntable.wait_for_running()
         self.turntable.wait_for_position(final_pos)
         self.turntable.wait_for_stop()
+
+    def rotate(self, clockwise, quarter_turns):
+
+        if self.shutdown:
+            return
+
+        assert quarter_turns > 0 and quarter_turns <= 2, "quarater_turns is %d, it must be between 0 and 2" % quarter_turns
+        current_pos = self.turntable.position
+        turn_degrees = TURNTABLE_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
+        square_cube_degrees = TURNTABLE_SQUARE_CUBE_DEGREES
+        square_turntable_degrees = TURNTABLE_SQUARE_TT_DEGREES
+
+        if not clockwise:
+            turn_degrees *= -1
+            square_cube_degrees *= -1
+            square_turntable_degrees *= -1
+
+        turn_pos = current_pos + turn_degrees
+        square_cube_pos = turn_pos + square_cube_degrees
+        square_turntable_pos = square_cube_pos + square_turntable_degrees
+        log.info("rotate_cube() %d quarter turns, clockwise %s, current_pos %d, turn_pos %d, square_cube_pos %d, square_turntable_pos %d" %
+            (quarter_turns, clockwise, current_pos, turn_pos, square_cube_pos, square_turntable_pos))
+
+        self._rotate(turn_pos)
+        self._rotate(square_cube_pos)
+        self._rotate(square_turntable_pos)
 
         # Only update the facing_XYZ variables if the entire side is turning.  For
         # a 3x3x3 this means the middle square is being turned, this happens if at
@@ -251,7 +274,8 @@ class CraneCuber(object):
         """
         assert rows >= 0 and rows <= self.rows_and_cols, "rows was %d, rows must be between 0 and %d" % (rows, self.rows_and_cols)
 
-        if self.shutdown:
+        # Moving to rows 0 is part of the shutdown sequence
+        if self.shutdown and rows:
             return
 
         # nothing to do
@@ -259,24 +283,20 @@ class CraneCuber(object):
             return
 
         if rows:
-            # TODO - double check this
-            mm_per_stud = 8
-            flipper_plus_holder_height_studs = 16
-            flipper_plus_holder_height_studs_mm =  flipper_plus_holder_height_studs * mm_per_stud
-            mm_per_groove = float(32/9) # 4 stud gear rack is 32mm long and has 9 grooves
-            # to_top_holder_mm = flipper_plus_holder_height_studs_mm - self.size_mm
-            # dwalton
-            final_pos_mm = flipper_plus_holder_height_studs_mm - int((3 - rows) * self.square_size_mm)
+            # 16.5 studs at 8mm per stud = 132mm
+            flipper_plus_holder_height_studs_mm =  132
+            cube_rows_height = int((3 - rows) * self.square_size_mm)
+            final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
 
-            degrees_per_groove = 15 # 360/24
-            final_pos_grooves = float(final_pos_mm/mm_per_groove)
-            final_pos = int(final_pos_grooves * degrees_per_groove)
-
-            log.info("elevate %d rows, flipper_plus_holder_height_studs_mm %s, mm_per_groove %s, final_pos_mm %s, final_pos_grooves %s, final_pos %s" % (rows, flipper_plus_holder_height_studs_mm, mm_per_groove, final_pos_mm, final_pos_grooves, final_pos))
+            # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
+            # http://www.robertcailliau.eu/Alphabetical/L/Lego/Gears/Dimensions/
+            diameter = 17.4
+            circ = diameter * pi
+            final_pos = int((final_pos_mm / circ) * 360)
         else:
             final_pos = 0
 
-        log.info("elevate() to final_pos %d" % final_pos)
+        log.info("elevate() from %d to %d, final_pos %d" % (self.rows_in_turntable, rows, final_pos))
 
         if rows < self.rows_in_turntable:
             self.elevator.run_to_abs_pos(position_sp=final_pos,
@@ -591,6 +611,7 @@ class CraneCuber(object):
         """
         Test the three motors
         """
+
         '''
         input('Press ENTER to flip (to forward)')
         self.flip()
@@ -627,44 +648,76 @@ class CraneCuber(object):
 
         if self.shutdown:
             return
+
+        input('Press ENTER elevate to 1 rows')
+        self.elevate(1)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to lower')
+        self.elevate(0)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to 2 rows')
+        self.elevate(2)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to 3 rows')
+        self.elevate(3)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to 2 rows')
+        self.elevate(2)
+
+        if self.shutdown:
+            return
+
+        input('Press ENTER elevate to lower')
+        self.elevate(0)
+
+        if self.shutdown:
+            return
         '''
+
         # dwalton
-        input('Press ENTER elevate to 3 rows')
-        self.elevate(3)
+        '''
+        input('Press ENTER to rotate 1 row clockwise')
+        self.elevate(1)
+        self.rotate(clockwise=True, quarter_turns=1)
 
         if self.shutdown:
             return
 
-        input('Press ENTER elevate to lower')
-        self.elevate(0)
+        input('Press ENTER to rotate 1 row counter clockwise')
+        self.elevate(1)
+        self.rotate(clockwise=False, quarter_turns=1)
 
         if self.shutdown:
             return
+        '''
 
-        input('Press ENTER elevate to 2 rows')
+        input('Press ENTER to rotate 2 row clockwise')
         self.elevate(2)
+        self.rotate(clockwise=True, quarter_turns=1)
 
         if self.shutdown:
             return
 
-        input('Press ENTER elevate to 3 rows')
-        self.elevate(3)
-
-        if self.shutdown:
-            return
-
-        input('Press ENTER elevate to 2 rows')
+        input('Press ENTER to rotate 2 row counter clockwise')
         self.elevate(2)
+        self.rotate(clockwise=False, quarter_turns=1)
 
         if self.shutdown:
             return
 
-        input('Press ENTER elevate to lower')
         self.elevate(0)
-
-        if self.shutdown:
-            return
-
 
 if __name__ == '__main__':
 
