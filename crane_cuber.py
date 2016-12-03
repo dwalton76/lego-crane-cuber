@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 # positive moves towards camera
 # This should be 90 degrees but some extra is needed to account for play between the gears
 FLIPPER_DEGREES = 120
-FLIPPER_SPEED = 300
+FLIPPER_SPEED = 600
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -34,7 +34,7 @@ FLIPPER_SPEED = 300
 # negative moves counter clockwise (viewed from above)
 # positive moves clockwise (viewed from above)
 TURNTABLE_TURN_DEGREES = 210
-TURNTABLE_SPEED = 300
+TURNTABLE_SPEED = 400
 
 # These numbers are for a 57mm 3x3x3 cube...need to calc these dynamically
 TURN_BLOCKED_TOUCH_DEGREES = 105
@@ -46,9 +46,9 @@ TURN_FREE_SQUARE_TT_DEGREES = -40
 
 # negative moves down
 # positive moves up
-ELEVATOR_SPEED_UP_FAST = 400
-ELEVATOR_SPEED_UP_SLOW = 200
-ELEVATOR_SPEED_DOWN_FAST = 800
+ELEVATOR_SPEED_UP_FAST = 1050
+ELEVATOR_SPEED_UP_SLOW = 800
+ELEVATOR_SPEED_DOWN_FAST = 1050
 ELEVATOR_SPEED_DOWN_SLOW = 200
 
 
@@ -168,8 +168,8 @@ class CraneCuber(object):
             log.info("turntable() position is %d, it should be %d" % (self.turntable.position, final_pos))
             self.turntable.run_to_abs_pos(position_sp=final_pos,
                                          speed_sp=50)
-            self.turntable.wait_until('running')
-            self.turntable.wait_while('running')
+            self.turntable.wait_until('running', timeout=1000)
+            self.turntable.wait_while('running', timeout=1000)
 
     def rotate(self, clockwise, quarter_turns):
 
@@ -277,8 +277,8 @@ class CraneCuber(object):
             self.flipper.run_to_abs_pos(position_sp=final_pos,
                                         speed_sp=30,
                                         stop_action='hold')
-            self.flipper.wait_until('running')
-            self.flipper.wait_while('running')
+            self.flipper.wait_until('running', timeout=1000)
+            self.flipper.wait_while('running', timeout=1000)
 
         # facing_west and facing_east won't change
         orig_north = self.facing_north
@@ -340,7 +340,7 @@ class CraneCuber(object):
 
         if rows:
             # 16 studs at 8mm per stud = 128mm
-            flipper_plus_holder_height_studs_mm =  130
+            flipper_plus_holder_height_studs_mm =  128
             cube_rows_height = int((3 - rows) * self.square_size_mm)
             final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
 
@@ -365,8 +365,7 @@ class CraneCuber(object):
                 # it drop very quickly down to 50 degrees and then lower it the
                 # last 50 at a much lower speed ramp it down some so it has time
                 # to stop
-                # dwalton
-                self.elevator.run_to_abs_pos(position_sp=200,
+                self.elevator.run_to_abs_pos(position_sp=100,
                                              speed_sp=ELEVATOR_SPEED_DOWN_FAST,
                                              ramp_down_sp=100,
                                              stop_action='hold')
@@ -374,7 +373,7 @@ class CraneCuber(object):
                 self.elevator.wait_while('running')
 
                 self.elevator.run_to_abs_pos(position_sp=0,
-                                             speed_sp=ELEVATOR_SPEED_DOWN_SLOW/2,
+                                             speed_sp=ELEVATOR_SPEED_DOWN_SLOW,
                                              stop_action='hold')
 
         # going up
@@ -404,8 +403,8 @@ class CraneCuber(object):
             self.elevator.run_to_abs_pos(position_sp=final_pos,
                                          speed_sp=ELEVATOR_SPEED_DOWN_SLOW/2,
                                          stop_action='hold')
-            self.elevator.wait_until('running')
-            self.elevator.wait_while('running')
+            self.elevator.wait_until('running', timeout=1000)
+            self.elevator.wait_while('running', timeout=1000)
 
     def scan_face(self, name):
         """
@@ -607,6 +606,17 @@ class CraneCuber(object):
 
         raise Exception("Could not find target_face %s, north %s, west %s, south %s, east %" %
                         (target_face, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
+
+    def reverse_actions(self, actions):
+        result = []
+        for action in reversed(actions):
+            if action.endswith("'") or action.endswith("’"):
+                action = action[:-1]
+            else:
+                action += "'"
+            result.append(action)
+
+        return result
 
     def run_actions(self, actions):
         """
@@ -825,11 +835,17 @@ class CraneCuber(object):
         """
         tetris = ('L', 'R', 'F', 'B', 'U’', 'D’', 'L’', 'R’')
         checkerboard = ('F', 'B2', 'R’', 'D2', 'B', 'R', 'U', 'D’', 'R', 'L’', 'D’', 'F’', 'R2', 'D', 'F2', 'B’')
-        self.run_actions(checkerboard)
+
+        #actions = self.reverse_actions(checkerboard)
+        actions = checkerboard
+        self.run_actions(actions)
 
         '''
         checkboard
         - 2min 38s with all speeds at 200
+        - 1min 45s with 300 turn, 300 flip, 400 fast up, 800 fast down
+        - 1min 29s with 400 turn, 400 flip, 800 fast up, 800 fast down
+        - 1min 24s with 400 turn, 600 flip, 1050 fast up, 1050 fast down
         '''
 
 
