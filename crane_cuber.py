@@ -9,13 +9,13 @@ from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, M
 from math import pi
 from pprint import pformat
 from rubikscolorresolver import RubiksColorSolver3x3x3
-from subprocess import check_output
 from time import sleep
 import datetime
 import json
 import logging
 import os
 import signal
+import subprocess
 import sys
 import time
 
@@ -78,15 +78,42 @@ class CraneCuber(object):
 
         self.init_motors()
         self.center_pixels = []
+        calibrate_filename = 'camera.json'
 
-        '''
-        calibrate_filename = '/tmp/MINDCUB3R-usb-camera.json'
+        if not os.path.exists(calibrate_filename):
+            print("""
+We need to know which pixel are the center pixels for each of the 9 squares.
+This data will be stored in camera.json which should look like the following.
+
+robot@ev3dev[lego-crane-cuber]# cat camera.json
+{"3x3x3" : [{"x" : 104, "y" : 63 },
+            {"x" : 157, "y" : 63 },
+            {"x" : 215, "y" : 63 },
+            {"x" : 100, "y" : 117 },
+            {"x" : 157, "y" : 117 },
+            {"x" : 212, "y" : 117 },
+            {"x" : 101, "y" : 174 },
+            {"x" : 157, "y" : 174 },
+            {"x" : 216, "y" : 174 }]
+}
+robot@ev3dev[lego-crane-cuber]#
+
+So how to find the (x,y) for each square? On your EV3 run:
+$ fswebcam --device /dev/video0 --no-timestamp --no-title --no-subtitle --no-banner --no-info -s brightness=120% -r 352x240 --png 1 /tmp/rubiks_scan.png
+
+scp this file to your laptop and view it via "edisplay rubiks_scan.png".
+edisplay will display the (x, y) coordinates as you move the mouse in the image.
+Use this to find the (x, y) coordinate for each square and record it in camera.json
+""")
+            raise Exception("No camera.json file")
+
         with open(calibrate_filename, 'r') as fh:
-            for square in json.load(fh):
+            squares = json.load(fh)['3x3x3']
+
+            for square in squares:
                 self.center_pixels.append((square.get('x'), square.get('y')))
 
         log.info("center_pixels\n%s" % pformat(self.center_pixels))
-        '''
 
     def init_motors(self):
 
@@ -163,13 +190,18 @@ class CraneCuber(object):
                                       ramp_up_sp=0)
         self.turntable.wait_until('running')
         self.turntable.wait_while('running')
+        prev_pos = None
 
         while self.turntable.position != final_pos:
             log.info("turntable() position is %d, it should be %d" % (self.turntable.position, final_pos))
             self.turntable.run_to_abs_pos(position_sp=final_pos,
                                          speed_sp=50)
-            self.turntable.wait_until('running', timeout=1000)
-            self.turntable.wait_while('running', timeout=1000)
+            self.turntable.wait_until('running', timeout=100)
+            self.turntable.wait_while('running', timeout=100)
+
+            if prev_pos is not None and self.turntable.position == prev_pos:
+                break
+            prev_pos = self.turntable.position
 
     def rotate(self, clockwise, quarter_turns):
 
@@ -246,6 +278,23 @@ class CraneCuber(object):
             # log.info("north %s, west %s, south %s, east %s (original)" % (orig_north, orig_west, orig_south, orig_east))
             # log.info("north %s, west %s, south %s, east %s" % (self.facing_north, self.facing_west, self.facing_south, self.facing_east))
 
+    def flip_settle_cube(self):
+        self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
+                                    speed_sp=FLIPPER_SPEED/2,
+                                    ramp_up_sp=100,
+                                    ramp_down_sp=100,
+                                    stop_action='hold')
+        self.flipper.wait_until('running')
+        self.flipper.wait_while('running', timeout=1000)
+
+        self.flipper.run_to_abs_pos(position_sp=0,
+                                    speed_sp=FLIPPER_SPEED/2,
+                                    ramp_up_sp=100,
+                                    ramp_down_sp=100,
+                                    stop_action='hold')
+        self.flipper.wait_until('running')
+        self.flipper.wait_while('running', timeout=1000)
+
     def flip(self):
 
         if self.shutdown:
@@ -270,6 +319,7 @@ class CraneCuber(object):
         finish = datetime.datetime.now()
         delta_ms = (finish - start).microseconds / 1000
         log.info("flip() to final_pos %s took %dms" % (final_pos, delta_ms))
+        prev_pos = None
 
         # Make sure we stopped where we should have
         while self.flipper.position != final_pos:
@@ -277,8 +327,12 @@ class CraneCuber(object):
             self.flipper.run_to_abs_pos(position_sp=final_pos,
                                         speed_sp=30,
                                         stop_action='hold')
-            self.flipper.wait_until('running', timeout=1000)
-            self.flipper.wait_while('running', timeout=1000)
+            self.flipper.wait_until('running', timeout=100)
+            self.flipper.wait_while('running', timeout=100)
+
+            if prev_pos is not None and self.flipper.position == prev_pos:
+                break
+            prev_pos = self.flipper.position
 
         # facing_west and facing_east won't change
         orig_north = self.facing_north
@@ -286,23 +340,28 @@ class CraneCuber(object):
         orig_up = self.facing_up
         orig_down = self.facing_down
 
-        # We flipped from the init position to where the flipper is blocking the view of the camera
-        if final_pos == FLIPPER_DEGREES:
-            self.facing_north = orig_up
-            self.facing_south = orig_down
-            self.facing_up = orig_south
-            self.facing_down = orig_north
-            # log.info("flipper1 north %s, south %s, up %s, down %s" %
-            #          (self.facing_north, self.facing_south, self.facing_up, self.facing_down))
+        # Sometimes we flip when the elevator is raised all the way up, we do
+        # this to get the flipper out of the way so we can take a pic of the
+        # cube. If that is the case then then do not alter self.faceing_xyz.
+        if not self.rows_in_turntable:
 
-        # We flipped from where the flipper is blocking the view of the camera to the init position
-        else:
-            self.facing_north = orig_down
-            self.facing_south = orig_up
-            self.facing_up = orig_north
-            self.facing_down = orig_south
-            # log.info("flipper2 north %s, south %s, up %s, down %s" %
-            #          (self.facing_north, self.facing_south, self.facing_up, self.facing_down))
+            # We flipped from the init position to where the flipper is blocking the view of the camera
+            if final_pos == FLIPPER_DEGREES:
+                self.facing_north = orig_up
+                self.facing_south = orig_down
+                self.facing_up = orig_south
+                self.facing_down = orig_north
+                # log.info("flipper1 north %s, south %s, up %s, down %s" %
+                #          (self.facing_north, self.facing_south, self.facing_up, self.facing_down))
+
+            # We flipped from where the flipper is blocking the view of the camera to the init position
+            else:
+                self.facing_north = orig_down
+                self.facing_south = orig_up
+                self.facing_up = orig_north
+                self.facing_down = orig_south
+                # log.info("flipper2 north %s, south %s, up %s, down %s" %
+                #          (self.facing_north, self.facing_south, self.facing_up, self.facing_down))
 
     def elevate(self, rows):
         """
@@ -394,6 +453,7 @@ class CraneCuber(object):
         finish = datetime.datetime.now()
         delta_ms = (finish - start).microseconds / 1000
         log.info("elevate() took %dms" % delta_ms)
+        prev_pos = None
 
         # The elevator position has to be exact so if we went to far (this can
         # happen due to the high speeds that we use) adjust slowly so we end up
@@ -401,10 +461,14 @@ class CraneCuber(object):
         while self.elevator.position != final_pos:
             log.info("elevate() position is %d, it should be %d" % (self.elevator.position, final_pos))
             self.elevator.run_to_abs_pos(position_sp=final_pos,
-                                         speed_sp=ELEVATOR_SPEED_DOWN_SLOW/2,
+                                         speed_sp=ELEVATOR_SPEED_DOWN_SLOW,
                                          stop_action='hold')
-            self.elevator.wait_until('running', timeout=1000)
-            self.elevator.wait_while('running', timeout=1000)
+            self.elevator.wait_until('running', timeout=100)
+            self.elevator.wait_while('running', timeout=100)
+
+            if prev_pos is not None and self.elevator.position == prev_pos:
+                break
+            prev_pos = self.elevator.position
 
     def scan_face(self, name):
         """
@@ -424,32 +488,20 @@ class CraneCuber(object):
 
         if name == 'U':
             init_square_index = 1
-            rotate = 270
-
         elif name == 'L':
             init_square_index = 10
-            rotate = 0
-
         elif name == 'F':
             init_square_index = 19
-            rotate = 0
-
         elif name == 'R':
             init_square_index = 28
-            rotate = 0
-
         elif name == 'B':
             init_square_index = 37
-            rotate = 0
-
         elif name == 'D':
             init_square_index = 46
-            rotate = 270
-
         else:
             raise Exception("Invalid face %s" % name)
 
-        png_filename = '/tmp/rubiks-side-%d.png' % face_number
+        png_filename = '/tmp/rubiks-side-%s.png' % name
 
         if os.path.exists(png_filename):
             os.unlink(png_filename)
@@ -462,16 +514,40 @@ class CraneCuber(object):
                          '--no-subtitle',
                          '--no-banner',
                          '--no-info',
+                         '-s', 'brightness=120%',
                          '-r', '352x240',
-                         '--rotate', rotate,
                          '--png', '1',
                          png_filename])
 
+        log.info("from PIL import Image - start")
+        from PIL import Image
+        log.info("from PIL import Image - end")
         im = Image.open(png_filename)
         pix = im.load()
 
         for index in range(9):
-            square_index = init_square_index + index
+            if name == 'U' or name == 'D':
+                if index == 0:
+                    square_index = init_square_index + 6
+                elif index == 1:
+                    square_index = init_square_index + 3
+                elif index == 2:
+                    square_index = init_square_index
+                elif index == 3:
+                    square_index = init_square_index + 7
+                elif index == 4:
+                    square_index = init_square_index + 4
+                elif index == 5:
+                    square_index = init_square_index + 1
+                elif index == 6:
+                    square_index = init_square_index + 8
+                elif index == 7:
+                    square_index = init_square_index + 5
+                elif index == 8:
+                    square_index = init_square_index + 2
+            else:
+                square_index = init_square_index + index
+
             (x, y) = self.center_pixels[index]
             (red, green, blue) = pix[x, y]
             log.info("square %d, (%s, %s), RGB (%d, %d, %d)" % (square_index, x, y, red, green, blue))
@@ -492,16 +568,19 @@ class CraneCuber(object):
         self.elevate(3)
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
+        self.flip_settle_cube()
         self.scan_face('R')
 
         self.elevate(3)
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
+        self.flip_settle_cube()
         self.scan_face('B')
 
         self.elevate(3)
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
+        self.flip_settle_cube()
         self.scan_face('L')
 
         # expose the 'D' side, then raise the cube so we can get the flipper out
@@ -510,12 +589,14 @@ class CraneCuber(object):
         self.elevate(3)
         self.flip()
         self.elevate(0)
+        self.flip_settle_cube()
         self.scan_face('D')
 
         # rotate to scan the 'U' side
         self.elevate(3)
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
+        self.flip_settle_cube()
         self.scan_face('U')
 
         # To make troubleshooting easier, move the F of the cube so that it
@@ -526,15 +607,19 @@ class CraneCuber(object):
         self.flip()
         self.elevate(0)
 
+        # dwalton
+
         if self.shutdown:
             return
 
         log.info("RGB json:\n%s\n" % json.dumps(self.colors))
         log.info("RGB pformat:\n%s\n" % pformat(self.colors))
-        self.rgb_solver = RubiksColorSolver()
+        self.rgb_solver = RubiksColorSolver3x3x3()
         self.rgb_solver.enter_scan_data(self.colors)
         self.cube_kociemba = self.rgb_solver.crunch_colors()
         log.info("Final Colors (kociemba): %s" % ''.join(self.cube_kociemba))
+        log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
+                    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
     def move_north_to_top(self):
         log.info("move_north_to_top() - flipper_at_init %s" % self.flipper_at_init)
@@ -719,9 +804,14 @@ class CraneCuber(object):
         if self.shutdown:
             return
 
-        output = check_output(['kociemba', ''.join(map(str, self.cube_kociemba))]).decode('ascii')
+        output = subprocess.check_output(['kociemba', ''.join(map(str, self.cube_kociemba))]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
+
+        self.elevate(0)
+
+        if not self.flipper_at_init:
+            self.flip()
 
     def test_basics(self):
         """
@@ -833,12 +923,10 @@ class CraneCuber(object):
         """
         https://ruwix.com/the-rubiks-cube/rubiks-cube-patterns-algorithms/
         """
-        tetris = ('L', 'R', 'F', 'B', 'U’', 'D’', 'L’', 'R’')
-        checkerboard = ('F', 'B2', 'R’', 'D2', 'B', 'R', 'U', 'D’', 'R', 'L’', 'D’', 'F’', 'R2', 'D', 'F2', 'B’')
+        tetris = ("L", "R", "F", "B", "U’", "D’", "L’", "R’")
+        checkerboard = ("F", "B2", "R’", "D2", "B", "R", "U", "D’", "R", "L’", "D’", "F’", "R2", "D", "F2", "B’")
 
-        #actions = self.reverse_actions(checkerboard)
-        actions = checkerboard
-        self.run_actions(actions)
+        self.run_actions(checkerboard)
 
         '''
         checkboard
@@ -864,14 +952,12 @@ if __name__ == '__main__':
 
     try:
         # cc.test_basics()
-        cc.test_patterns()
+        # cc.test_patterns()
 
-        '''
-        while True:
-            cc.wait_for_touch_sensor()
+        while not cc.shutdown:
             cc.scan()
             cc.resolve()
-        '''
+            cc.wait_for_touch_sensor()
         cc.shutdown_robot()
 
     except Exception as e:
