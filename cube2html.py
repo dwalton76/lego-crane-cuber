@@ -3,23 +3,11 @@
 import json
 
 cube_input = """
-{"1": [3, 5, 30], "2": [141, 5, 15], "3": [115, 6, 12], "4": [76, 78, 129], "5": [136, 8, 23], "6": [68, 3, 7], "7": [133, 127, 173], "8": [123, 5, 19], "9": [54, 1, 9], "10": [155, 141, 164], "11": [219, 206, 224], "12": [197, 183, 206], "13": [231, 218, 236], "14": [219, 194, 223], "15": [128, 113, 134], "16": [233, 224, 245], "17": [201, 189, 211], "18": [80, 66, 79], "19": [83, 4, 10], "20": [15, 74, 88], "21": [7, 24, 34], "22": [190, 97, 118], "23": [11, 67, 82], "24": [4, 4, 6], "25": [155, 66, 88], "26": [11, 44, 49], "27": [11, 4, 11], "28": [133, 113, 60], "29": [196, 169, 92], "30": [131, 119, 69], "31": [248, 238, 211], "32": [57, 39, 35], "33": [5, 3, 6], "34": [189, 167, 130], "35": [24, 15, 20], "36": [13, 8, 15], "37": [125, 48, 30], "38": [181, 64, 31], "39": [164, 60, 35], "40": [122, 115, 159], "41": [9, 21, 71], "42": [4, 3, 11], "43": [94, 96, 147], "44": [7, 5, 10], "45": [13, 7, 9], "46": [10, 42, 53], "47": [184, 63, 32], "48": [162, 62, 36], "49": [103, 134, 152], "50": [176, 59, 41], "51": [90, 30, 19], "52": [98, 127, 143], "53": [123, 50, 43], "54": [9, 5, 4]}
+{"1": [160, 160, 48], "2": [165, 165, 55], "3": [160, 159, 51], "4": [164, 160, 52], "5": [26, 102, 72], "6": [20, 105, 74], "7": [27, 113, 84], "8": [24, 110, 75], "9": [148, 53, 9], "10": [147, 49, 10], "11": [155, 54, 8], "12": [155, 54, 8], "13": [3, 40, 146], "14": [3, 40, 146], "15": [4, 41, 148], "16": [3, 40, 144], "17": [104, 4, 2], "18": [103, 3, 1], "19": [112, 4, 4], "20": [113, 5, 3], "21": [142, 171, 215], "22": [155, 178, 222], "23": [144, 173, 217], "24": [131, 159, 199]}
 """
 
 cube = json.loads(cube_input)
-'''
-    The squares are numbered like so:
-
-              01 02 03
-              04 05 06
-              07 08 09
-    10 11 12  19 20 21  28 29 30  37 38 39
-    13 14 15  22 23 24  31 32 33  40 41 42
-    16 17 18  25 26 27  34 35 36  43 44 45
-              46 47 48
-              49 50 51
-              52 53 54
-'''
+squares = len(cube.keys())
 
 col = 1
 print("""<!DOCTYPE html>
@@ -39,7 +27,10 @@ div.side {
     margin: 10px;
     float: left;
 }
+""")
 
+if squares == 54:
+    print("""
 div.col1,
 div.col2 {
     float: left;
@@ -49,6 +40,31 @@ div.col3 {
     margin-left: 80px;
 }
 
+div#upper,
+div#bottom {
+    margin-left: 150px;
+}
+
+""")
+
+elif squares == 24:
+    print("""
+div.col1 {
+    float: left;
+}
+
+div.col2 {
+    margin-left: 40px;
+}
+
+div#upper,
+div#bottom {
+    margin-left: 110px;
+}
+""")
+
+
+print("""
 div.square {
     width: 40px;
     height: 40px;
@@ -56,11 +72,6 @@ div.square {
     font-weight: bold;
     line-height: 40px;
     text-align: center;
-}
-
-div#upper,
-div#bottom {
-    margin-left: 150px;
 }
 
 div.square span {
@@ -75,7 +86,21 @@ div.square span {
 <body>
 """)
 
-if len(cube.keys) == 54:
+if squares == 54:
+    '''
+    The squares are numbered like so:
+
+              01 02 03
+              04 05 06
+              07 08 09
+    10 11 12  19 20 21  28 29 30  37 38 39
+    13 14 15  22 23 24  31 32 33  40 41 42
+    16 17 18  25 26 27  34 35 36  43 44 45
+              46 47 48
+              49 50 51
+              52 53 54
+    '''
+
     for index in range(1, 55):
 
         if index == 1:
@@ -116,9 +141,56 @@ if len(cube.keys) == 54:
         if index == 9 or index == 45 or index == 54:
             print("<div class='clear'></div>")
 
-elif len(cube.keys) == 36:
-    for index in range(1, 37):
-        pass
+elif squares == 24:
+    '''
+    The squares are numbered like so:
+
+           01 02
+           03 04
+    05 06  09 10  13 14  17 18
+    07 08  11 12  15 16  19 20
+           21 22
+           23 24
+    '''
+
+    for index in range(1, 25):
+        if index == 1:
+            print("<div class='side' id='upper'>")
+
+        elif index == 5:
+            print("<div class='side' id='left'>")
+
+        elif index == 9:
+            print("<div class='side' id='front'>")
+
+        elif index == 13:
+            print("<div class='side' id='right'>")
+
+        elif index == 17:
+            print("<div class='side' id='back'>")
+
+        elif index == 21:
+            print("<div class='side' id='bottom'>")
+
+        (red, green, blue) = cube[str(index)]
+        print("<div class='square col%d' style='background-color: #%s%s%s;'><span>%s</span></div>" %
+            (col,
+             str(hex(red))[2:].zfill(2),
+             str(hex(green))[2:].zfill(2),
+             str(hex(blue))[2:].zfill(2),
+             str(index).zfill(2)))
+
+        if index in (4, 8, 12, 16, 20, 24):
+            print("</div>")
+
+        col += 1
+
+        if col == 3:
+            # print("<div class='clear_left'></div>")
+            col = 1
+
+        if index == 4 or index == 20 or index == 24:
+            print("<div class='clear'></div>")
 
 else:
     raise Exception("Only 2x2x2 and 3x3x3 cubes are supported")
