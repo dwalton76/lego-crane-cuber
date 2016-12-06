@@ -46,6 +46,14 @@ ELEVATOR_SPEED_UP_SLOW = 800
 ELEVATOR_SPEED_DOWN_FAST = 1050
 ELEVATOR_SPEED_DOWN_SLOW = 200
 
+# References
+# ==========
+# cube sizes
+# http://cubeman.org/measure.txt
+#
+# README editing
+# https://jbt.github.io/markdown-editor/
+
 
 class CraneCuber3x3x3(object):
 
@@ -538,6 +546,10 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
                          '--png', '1',
                          png_filename])
 
+        if not os.path.exists(png_filename):
+            self.shutdown = True
+            return
+
         from PIL import Image
         im = Image.open(png_filename)
         pix = im.load()
@@ -998,6 +1010,10 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
                          '-r', '352x240',
                          '--png', '1',
                          png_filename])
+
+        if not os.path.exists(png_filename):
+            self.shutdown = True
+            return
 
         from PIL import Image
         im = Image.open(png_filename)
