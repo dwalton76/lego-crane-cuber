@@ -75,45 +75,53 @@ div.square span {
 <body>
 """)
 
-for index in range(1, 55):
+if len(cube.keys) == 54:
+    for index in range(1, 55):
 
-    if index == 1:
-        print("<div class='side' id='upper'>")
+        if index == 1:
+            print("<div class='side' id='upper'>")
 
-    elif index == 10:
-        print("<div class='side' id='left'>")
+        elif index == 10:
+            print("<div class='side' id='left'>")
 
-    elif index == 19:
-        print("<div class='side' id='front'>")
+        elif index == 19:
+            print("<div class='side' id='front'>")
 
-    elif index == 28:
-        print("<div class='side' id='right'>")
+        elif index == 28:
+            print("<div class='side' id='right'>")
 
-    elif index == 37:
-        print("<div class='side' id='back'>")
+        elif index == 37:
+            print("<div class='side' id='back'>")
 
-    elif index == 46:
-        print("<div class='side' id='bottom'>")
+        elif index == 46:
+            print("<div class='side' id='bottom'>")
 
-    (red, green, blue) = cube[str(index)]
-    print("<div class='square col%d' style='background-color: #%s%s%s;'><span>%s</span></div>" %
-        (col,
-         str(hex(red))[2:].zfill(2),
-         str(hex(green))[2:].zfill(2),
-         str(hex(blue))[2:].zfill(2),
-         str(index).zfill(2)))
+        (red, green, blue) = cube[str(index)]
+        print("<div class='square col%d' style='background-color: #%s%s%s;'><span>%s</span></div>" %
+            (col,
+             str(hex(red))[2:].zfill(2),
+             str(hex(green))[2:].zfill(2),
+             str(hex(blue))[2:].zfill(2),
+             str(index).zfill(2)))
 
-    if index in (9, 18, 27, 36, 45, 54):
-        print("</div>")
+        if index in (9, 18, 27, 36, 45, 54):
+            print("</div>")
 
-    col += 1
+        col += 1
 
-    if col == 4:
-        # print("<div class='clear_left'></div>")
-        col = 1
+        if col == 4:
+            # print("<div class='clear_left'></div>")
+            col = 1
 
-    if index == 9 or index == 45 or index == 54:
-        print("<div class='clear'></div>")
+        if index == 9 or index == 45 or index == 54:
+            print("<div class='clear'></div>")
+
+elif len(cube.keys) == 36:
+    for index in range(1, 37):
+        pass
+
+else:
+    raise Exception("Only 2x2x2 and 3x3x3 cubes are supported")
 
 print("</body>")
 print("</html>")

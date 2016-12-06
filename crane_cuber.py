@@ -8,7 +8,7 @@ A Rubiks cube solving robot made from EV3 + 42009
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
 from math import pi
 from pprint import pformat
-from rubikscolorresolver import RubiksColorSolver3x3x3
+from rubikscolorresolver import RubiksColorSolver2x2x2, RubiksColorSolver3x3x3
 from time import sleep
 import datetime
 import json
@@ -36,11 +36,6 @@ FLIPPER_SPEED = 600
 TURNTABLE_TURN_DEGREES = 210
 TURNTABLE_SPEED = 400
 
-# These numbers are for a 57mm 3x3x3 cube...need to calc these dynamically
-TURN_BLOCKED_TOUCH_DEGREES = 105
-TURN_BLOCKED_SQUARE_CUBE_DEGREES = -145
-TURN_BLOCKED_SQUARE_TT_DEGREES = 40
-
 TURN_FREE_TOUCH_DEGREES = 40
 TURN_FREE_SQUARE_TT_DEGREES = -40
 
@@ -52,7 +47,7 @@ ELEVATOR_SPEED_DOWN_FAST = 1050
 ELEVATOR_SPEED_DOWN_SLOW = 200
 
 
-class CraneCuber(object):
+class CraneCuber3x3x3(object):
 
     def __init__(self, rows_and_cols=3, size_mm=57):
         self.shutdown = False
@@ -73,15 +68,41 @@ class CraneCuber(object):
         self.facing_west = 'L'
         self.facing_south = 'F'
         self.facing_east = 'R'
+        self.rgb_solver = RubiksColorSolver3x3x3()
         signal.signal(signal.SIGTERM, self.signal_term_handler)
         signal.signal(signal.SIGINT, self.signal_int_handler)
 
-        self.init_motors()
+        # These numbers are for a 57mm 3x3x3 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 105
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -145
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
+        self.rows_in_turntable_to_count_as_face_turn = 2
+
         self.center_pixels = []
         calibrate_filename = 'camera.json'
 
         if not os.path.exists(calibrate_filename):
-            print("""
+            self.print_calibrate_howto()
+            raise Exception("No camera.json file")
+
+        with open(calibrate_filename, 'r') as fh:
+            key = "%dx%dx%d" % (self.rows_and_cols, self.rows_and_cols, self.rows_and_cols)
+            data = json.load(fh)
+
+            if key in data:
+                squares = data[key]
+
+                for square in squares:
+                    self.center_pixels.append((square.get('x'), square.get('y')))
+            else:
+                self.print_calibrate_howto()
+                raise Exception("Cube %s is not in %s" % (key, calibrate_filename))
+
+        log.info("center_pixels\n%s" % pformat(self.center_pixels))
+        self.init_motors()
+
+    def print_calibrate_howto(self):
+        print("""
 We need to know which pixel are the center pixels for each of the 9 squares.
 This data will be stored in camera.json which should look like the following.
 
@@ -105,15 +126,6 @@ scp this file to your laptop and view it via "edisplay rubiks_scan.png".
 edisplay will display the (x, y) coordinates as you move the mouse in the image.
 Use this to find the (x, y) coordinate for each square and record it in camera.json
 """)
-            raise Exception("No camera.json file")
-
-        with open(calibrate_filename, 'r') as fh:
-            squares = json.load(fh)['3x3x3']
-
-            for square in squares:
-                self.center_pixels.append((square.get('x'), square.get('y')))
-
-        log.info("center_pixels\n%s" % pformat(self.center_pixels))
 
     def init_motors(self):
 
@@ -212,7 +224,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         current_pos = self.turntable.position
 
         # cube will turn freely since none of the rows are being held
-        if self.rows_in_turntable == 3:
+        if self.rows_in_turntable == self.rows_and_cols:
             turn_degrees = TURN_FREE_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
             square_turntable_degrees = TURN_FREE_SQUARE_TT_DEGREES
 
@@ -230,9 +242,9 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
             self._rotate(square_turntable_pos)
 
         else:
-            turn_degrees = TURN_BLOCKED_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
-            square_cube_degrees = TURN_BLOCKED_SQUARE_CUBE_DEGREES
-            square_turntable_degrees = TURN_BLOCKED_SQUARE_TT_DEGREES
+            turn_degrees = self.TURN_BLOCKED_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
+            square_cube_degrees = self.TURN_BLOCKED_SQUARE_CUBE_DEGREES
+            square_turntable_degrees = self.TURN_BLOCKED_SQUARE_TT_DEGREES
 
             if not clockwise:
                 turn_degrees *= -1
@@ -252,7 +264,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         # Only update the facing_XYZ variables if the entire side is turning.  For
         # a 3x3x3 this means the middle square is being turned, this happens if at
         # least two rows are up in the turntable
-        if self.rows_in_turntable >= 2:
+        if self.rows_in_turntable >= self.rows_in_turntable_to_count_as_face_turn:
             orig_north = self.facing_north
             orig_west = self.facing_west
             orig_south = self.facing_south
@@ -279,6 +291,10 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
             # log.info("north %s, west %s, south %s, east %s" % (self.facing_north, self.facing_west, self.facing_south, self.facing_east))
 
     def flip_settle_cube(self):
+
+        if self.shutdown:
+            return
+
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
                                     speed_sp=FLIPPER_SPEED/2,
                                     ramp_up_sp=100,
@@ -342,7 +358,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
 
         # Sometimes we flip when the elevator is raised all the way up, we do
         # this to get the flipper out of the way so we can take a pic of the
-        # cube. If that is the case then then do not alter self.faceing_xyz.
+        # cube. If that is the case then then do not alter self.facing_xyz.
         if not self.rows_in_turntable:
 
             # We flipped from the init position to where the flipper is blocking the view of the camera
@@ -400,7 +416,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         if rows:
             # 16 studs at 8mm per stud = 128mm
             flipper_plus_holder_height_studs_mm =  128
-            cube_rows_height = int((3 - rows) * self.square_size_mm)
+            cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
             final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
 
             # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
@@ -470,6 +486,9 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
                 break
             prev_pos = self.elevator.position
 
+    def elevate_max(self):
+        self.elevate(self.rows_and_cols)
+
     def scan_face(self, name):
         """
         The squares are numbered like so:
@@ -519,9 +538,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
                          '--png', '1',
                          png_filename])
 
-        log.info("from PIL import Image - start")
         from PIL import Image
-        log.info("from PIL import Image - end")
         im = Image.open(png_filename)
         pix = im.load()
 
@@ -565,19 +582,19 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         self.colors = {}
         self.scan_face('F')
 
-        self.elevate(3)
+        self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
         self.flip_settle_cube()
         self.scan_face('R')
 
-        self.elevate(3)
+        self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
         self.flip_settle_cube()
         self.scan_face('B')
 
-        self.elevate(3)
+        self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
         self.flip_settle_cube()
@@ -586,14 +603,14 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         # expose the 'D' side, then raise the cube so we can get the flipper out
         # of the way, get the flipper out of the way, then lower the cube
         self.flip()
-        self.elevate(3)
+        self.elevate_max()
         self.flip()
         self.elevate(0)
         self.flip_settle_cube()
         self.scan_face('D')
 
         # rotate to scan the 'U' side
-        self.elevate(3)
+        self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
         self.flip_settle_cube()
@@ -602,19 +619,16 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         # To make troubleshooting easier, move the F of the cube so that it
         # is facing the camera like it was when we started the scan
         self.flip()
-        self.elevate(3)
+        self.elevate_max()
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
-
-        # dwalton
 
         if self.shutdown:
             return
 
         log.info("RGB json:\n%s\n" % json.dumps(self.colors))
         log.info("RGB pformat:\n%s\n" % pformat(self.colors))
-        self.rgb_solver = RubiksColorSolver3x3x3()
         self.rgb_solver.enter_scan_data(self.colors)
         self.cube_kociemba = self.rgb_solver.crunch_colors()
         log.info("Final Colors (kociemba): %s" % ''.join(self.cube_kociemba))
@@ -624,7 +638,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
     def move_north_to_top(self):
         log.info("move_north_to_top() - flipper_at_init %s" % self.flipper_at_init)
         if self.flipper_at_init:
-            self.elevate(3)
+            self.elevate_max()
             self.rotate(clockwise=True, quarter_turns=2)
 
         self.elevate(0)
@@ -633,7 +647,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
 
     def move_west_to_top(self):
         log.info("move_west_to_top() - flipper_at_init %s" % self.flipper_at_init)
-        self.elevate(3)
+        self.elevate_max()
 
         if self.flipper_at_init:
             self.rotate(clockwise=False, quarter_turns=1)
@@ -648,7 +662,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         log.info("move_south_to_top() - flipper_at_init %s" % self.flipper_at_init)
 
         if not self.flipper_at_init:
-            self.elevate(3)
+            self.elevate_max()
             self.rotate(clockwise=True, quarter_turns=2)
 
         self.elevate(0)
@@ -657,7 +671,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
 
     def move_east_to_top(self):
         log.info("move_east_to_top() - flipper_at_init %s" % self.flipper_at_init)
-        self.elevate(3)
+        self.elevate_max()
 
         if self.flipper_at_init:
             self.rotate(clockwise=True, quarter_turns=1)
@@ -692,17 +706,6 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         raise Exception("Could not find target_face %s, north %s, west %s, south %s, east %" %
                         (target_face, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
 
-    def reverse_actions(self, actions):
-        result = []
-        for action in reversed(actions):
-            if action.endswith("'") or action.endswith("’"):
-                action = action[:-1]
-            else:
-                action += "'"
-            result.append(action)
-
-        return result
-
     def run_actions(self, actions):
         """
         action will be a series of moves such as
@@ -736,6 +739,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
             direction = None
 
             if self.facing_up == 'U':
+                # dwalton - fix this for 2x2x2?
                 if target_face == 'U':
                     self.elevate(1)
                 elif target_face == 'D':
@@ -871,8 +875,8 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         if self.shutdown:
             return
 
-        input('Press ENTER elevate to 3 rows')
-        self.elevate(3)
+        input('Press ENTER elevate to max rows')
+        self.elevate_max()
 
         if self.shutdown:
             return
@@ -937,6 +941,94 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         '''
 
 
+class CraneCuber2x2x2(CraneCuber3x3x3):
+
+    def __init__(self, rows_and_cols=2, size_mm=40):
+        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+        self.rgb_solver = RubiksColorSolver2x2x2()
+
+        # These are for a 40mm 2x2x2 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 77
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
+        self.rows_in_turntable_to_count_as_face_turn = 1
+
+    def scan_face(self, name):
+        """
+        The squares are numbered like so:
+
+               01 02
+               03 04
+        05 06  09 10  13 14  17 18
+        07 08  11 12  15 16  19 20
+               21 22
+               23 24
+        """
+        log.info("scan_face() %s" % name)
+
+        if name == 'U':
+            init_square_index = 1
+        elif name == 'L':
+            init_square_index = 5
+        elif name == 'F':
+            init_square_index = 9
+        elif name == 'R':
+            init_square_index = 13
+        elif name == 'B':
+            init_square_index = 17
+        elif name == 'D':
+            init_square_index = 21
+        else:
+            raise Exception("Invalid face %s" % name)
+
+        png_filename = '/tmp/rubiks-side-%s.png' % name
+
+        if os.path.exists(png_filename):
+            os.unlink(png_filename)
+
+        # capture a single png from the webcam
+        subprocess.call(['fswebcam',
+                         '--device', '/dev/video0',
+                         '--no-timestamp',
+                         '--no-title',
+                         '--no-subtitle',
+                         '--no-banner',
+                         '--no-info',
+                         '-s', 'brightness=120%',
+                         '-r', '352x240',
+                         '--png', '1',
+                         png_filename])
+
+        from PIL import Image
+        im = Image.open(png_filename)
+        pix = im.load()
+
+        for index in range(4):
+            if name == 'U' or name == 'D':
+                if index == 0:
+                    square_index = init_square_index + 2
+                elif index == 1:
+                    square_index = init_square_index
+                elif index == 2:
+                    square_index = init_square_index + 3
+                elif index == 3:
+                    square_index = init_square_index + 1
+            else:
+                square_index = init_square_index + index
+
+            (x, y) = self.center_pixels[index]
+            (red, green, blue) = pix[x, y]
+            log.info("square %d, (%s, %s), RGB (%d, %d, %d)" % (square_index, x, y, red, green, blue))
+
+            # colors is a dict where the square number (as an int) will be
+            # the key and a RGB tuple the value
+            self.colors[square_index] = (red, green, blue)
+
+        # Now that we know the colors, rm the file
+        # os.unlink(png_filename)
+        log.info("\n")
+
+
 if __name__ == '__main__':
 
     # logging.basicConfig(filename='rubiks.log',
@@ -948,7 +1040,7 @@ if __name__ == '__main__':
     logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
-    cc = CraneCuber()
+    cc = CraneCuber2x2x2()
 
     try:
         # cc.test_basics()
