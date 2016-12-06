@@ -639,11 +639,12 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         if self.shutdown:
             return
 
+    def resolve_colors(self):
         log.info("RGB json:\n%s\n" % json.dumps(self.colors))
         log.info("RGB pformat:\n%s\n" % pformat(self.colors))
         self.rgb_solver.enter_scan_data(self.colors)
-        self.cube_kociemba = self.rgb_solver.crunch_colors()
-        log.info("Final Colors (kociemba): %s" % ''.join(self.cube_kociemba))
+        self.cube_for_resolver = self.rgb_solver.crunch_colors()
+        log.info("Final Colors: %s" % ''.join(self.cube_for_resolver))
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
                     (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
@@ -815,12 +816,12 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
             self.rotate(clockwise, quarter_turns)
             log.info("\n\n\n\n")
 
-    def resolve(self):
+    def resolve_moves(self):
 
         if self.shutdown:
             return
 
-        output = subprocess.check_output(['kociemba', ''.join(map(str, self.cube_kociemba))]).decode('ascii')
+        output = subprocess.check_output(['kociemba', ''.join(map(str, self.cube_for_resolver))]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
 
@@ -953,6 +954,110 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         '''
 
 
+def RubiksSolver2x2x2(normal):
+    """
+    100% of the credit for this function goes to
+    http://codegolf.stackexchange.com/questions/35002/solve-the-rubiks-pocket-cube
+    """
+
+    permutation = [[0,7,2,15,4,5,6,21,16,8,3,11,12,13,14,23,17,9,1,19,20,18,22,10],
+                   [2,0,3,1,6,7,8,9,10,11,4,5,12,13,14,15,16,17,18,19,20,21,22,23],
+                   [0,1,13,5,4,20,14,6,2,9,10,11,12,21,15,7,3,17,18,19,16,8,22,23]]
+
+    def applyMove(state, move):
+        return ''.join([state[i] for i in permutation[move]])
+
+    '''
+    In the codegolf challenge they defined the input as
+
+    - -   A B   - -   - -
+    - -   C D   - -   - -
+
+    E F   G H   I J   K L
+    M N   O P   Q R   S T
+
+    - -   U V   - -   - -
+    - -   W X   - -   - -
+
+    But normally we number cubes like this
+
+           01 02
+           03 04
+    05 06  09 10  13 14  17 18
+    07 08  11 12  15 16  19 20
+           21 22
+           23 24
+
+    So we will defind the former layout as "scramble" and the latter as "normal".
+    Convert the normal layout to the scramble layout
+    '''
+    normal = list(normal)
+    scramble = normal[0:4]
+    scramble.append(normal[4])
+    scramble.append(normal[5])
+    scramble.append(normal[8])
+    scramble.append(normal[9])
+    scramble.append(normal[12])
+    scramble.append(normal[13])
+    scramble.append(normal[16])
+    scramble.append(normal[17])
+    scramble.append(normal[6])
+    scramble.append(normal[7])
+    scramble.append(normal[10])
+    scramble.append(normal[11])
+    scramble.append(normal[14])
+    scramble.append(normal[16])
+    scramble.append(normal[18])
+    scramble.append(normal[19])
+    scramble.extend(normal[20:24])
+
+    # remove up, front, right colors
+    scramble = ''.join([(' ', x)[x in scramble[12]+scramble[19]+scramble[22]] for x in scramble])
+    solved = ' '*4+scramble[12]*2+' '*4+scramble[19]*2+scramble[12]*2+' '*4+scramble[19]*2+scramble[22]*4
+
+    dict1 = {scramble: ''} #stores states with dist 0,1,2,... from the scramble
+    dict2 = {solved: ''} #stores states with dist 0,1,2,... from the solved state
+
+    result = ''
+    moveName = 'RUF'
+    turnName = " 2'"
+
+    for i in range(6):
+        tmp = {}
+        for state in dict1:
+            if state in dict2:
+                #solution found
+                result = dict1[state] + dict2[state]
+                result = result.replace('2', '2 ')
+                result = result.replace("'", "' ")
+                return result.split()
+            moveString = dict1[state]
+            #do all 9 moves
+            for move in range(3):
+                for turn in range(3):
+                    state = applyMove(state, move)
+                    tmp[state] = moveString + moveName[move] + turnName[turn]
+                state = applyMove(state, move)
+        dict1 = tmp
+        tmp = {}
+        for state in dict2:
+            if state in dict1:
+                #solution found
+                retult = dict1[state] + dict2[state]
+                result = result.replace('2', '2 ')
+                result = result.replace("'", "' ")
+                return result.split()
+            moveString = dict2[state]
+            #do all 9 moves
+            for move in range(3):
+                for turn in range(3):
+                    state = applyMove(state, move)
+                    tmp[state] = moveName[move] + turnName[2 - turn] + moveString
+                state = applyMove(state, move)
+        dict2 = tmp
+    return []
+
+
 class CraneCuber2x2x2(CraneCuber3x3x3):
 
     def __init__(self, rows_and_cols=2, size_mm=40):
@@ -1044,6 +1149,18 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         # os.unlink(png_filename)
         log.info("\n")
 
+    def resolve_moves(self):
+
+        if self.shutdown:
+            return
+
+        actions = RubiksSolver2x2x2(self.cube_for_resolver)
+        self.run_actions(actions)
+
+        self.elevate(0)
+
+        if not self.flipper_at_init:
+            self.flip()
 
 if __name__ == '__main__':
 
@@ -1064,7 +1181,8 @@ if __name__ == '__main__':
 
         while not cc.shutdown:
             cc.scan()
-            cc.resolve()
+            cc.resolve_colors()
+            cc.resolve_moves()
             cc.wait_for_touch_sensor()
         cc.shutdown_robot()
 
