@@ -158,7 +158,6 @@ class CraneCuber3x3x3(object):
                                       speed_sp=TURNTABLE_SPEED,
                                       stop_action='hold',
                                       ramp_up_sp=0)
-        self.turntable.wait_until('running')
         self.turntable.wait_while('running')
         prev_pos = None
 
@@ -166,7 +165,6 @@ class CraneCuber3x3x3(object):
             log.info("turntable() position is %d, it should be %d" % (self.turntable.position, final_pos))
             self.turntable.run_to_abs_pos(position_sp=final_pos,
                                          speed_sp=50)
-            self.turntable.wait_until('running', timeout=100)
             self.turntable.wait_while('running', timeout=100)
 
             if prev_pos is not None and self.turntable.position == prev_pos:
@@ -258,7 +256,6 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
-        self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
 
         self.flipper.run_to_abs_pos(position_sp=0,
@@ -266,7 +263,6 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
-        self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
 
     def flip(self):
@@ -287,7 +283,6 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
-        self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
         self.flipper_at_init = not self.flipper_at_init
         finish = datetime.datetime.now()
@@ -301,7 +296,6 @@ class CraneCuber3x3x3(object):
             self.flipper.run_to_abs_pos(position_sp=final_pos,
                                         speed_sp=30,
                                         stop_action='hold')
-            self.flipper.wait_until('running', timeout=100)
             self.flipper.wait_while('running', timeout=100)
 
             if prev_pos is not None and self.flipper.position == prev_pos:
@@ -402,7 +396,6 @@ class CraneCuber3x3x3(object):
                                              speed_sp=ELEVATOR_SPEED_DOWN_FAST,
                                              ramp_down_sp=100,
                                              stop_action='hold')
-                self.elevator.wait_until('running')
                 self.elevator.wait_while('running')
 
                 self.elevator.run_to_abs_pos(position_sp=0,
@@ -421,7 +414,6 @@ class CraneCuber3x3x3(object):
                                              ramp_down_sp=100,
                                              stop_action='hold')
 
-        self.elevator.wait_until('running')
         self.elevator.wait_while('running')
         self.rows_in_turntable = rows
         finish = datetime.datetime.now()
@@ -437,7 +429,6 @@ class CraneCuber3x3x3(object):
             self.elevator.run_to_abs_pos(position_sp=final_pos,
                                          speed_sp=ELEVATOR_SPEED_DOWN_SLOW,
                                          stop_action='hold')
-            self.elevator.wait_until('running', timeout=100)
             self.elevator.wait_while('running', timeout=100)
 
             if prev_pos is not None and self.elevator.position == prev_pos:
