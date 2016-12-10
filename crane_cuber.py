@@ -7,7 +7,6 @@ A Rubiks cube solving robot made from EV3 + 42009
 
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
 from math import pi
-from PIL import Image
 from pprint import pformat
 from rubikscolorresolver import RubiksColorSolver2x2x2, RubiksColorSolver3x3x3
 from time import sleep
@@ -21,6 +20,9 @@ import sys
 import time
 
 log = logging.getLogger(__name__)
+
+# http://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id
+SERVER = 192.168.0.4
 
 # negative moves to init position
 # positive moves towards camera
@@ -68,7 +70,6 @@ class CraneCuber3x3x3(object):
         self.turntable= LargeMotor(OUTPUT_C)
         self.touch_sensor = TouchSensor()
         self.motors = [self.elevator, self.flipper, self.turntable]
-        self.rgb_solver = None
         self.cube = {}
         self.rows_in_turntable = 0
         self.facing_up = 'U'
@@ -77,7 +78,6 @@ class CraneCuber3x3x3(object):
         self.facing_west = 'L'
         self.facing_south = 'F'
         self.facing_east = 'R'
-        self.rgb_solver = RubiksColorSolver3x3x3()
         signal.signal(signal.SIGTERM, self.signal_term_handler)
         signal.signal(signal.SIGINT, self.signal_int_handler)
 
@@ -87,54 +87,7 @@ class CraneCuber3x3x3(object):
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
         self.rows_in_turntable_to_count_as_face_turn = 2
 
-        self.center_pixels = []
-        calibrate_filename = 'camera.json'
-
-        if not os.path.exists(calibrate_filename):
-            self.print_calibrate_howto()
-            raise Exception("No camera.json file")
-
-        with open(calibrate_filename, 'r') as fh:
-            key = "%dx%dx%d" % (self.rows_and_cols, self.rows_and_cols, self.rows_and_cols)
-            data = json.load(fh)
-
-            if key in data:
-                squares = data[key]
-
-                for square in squares:
-                    self.center_pixels.append((square.get('x'), square.get('y')))
-            else:
-                self.print_calibrate_howto()
-                raise Exception("Cube %s is not in %s" % (key, calibrate_filename))
-
-        log.info("center_pixels\n%s" % pformat(self.center_pixels))
         self.init_motors()
-
-    def print_calibrate_howto(self):
-        print("""
-We need to know which pixel are the center pixels for each of the 9 squares.
-This data will be stored in camera.json which should look like the following.
-
-robot@ev3dev[lego-crane-cuber]# cat camera.json
-{"3x3x3" : [{"x" : 104, "y" : 63 },
-            {"x" : 157, "y" : 63 },
-            {"x" : 215, "y" : 63 },
-            {"x" : 100, "y" : 117 },
-            {"x" : 157, "y" : 117 },
-            {"x" : 212, "y" : 117 },
-            {"x" : 101, "y" : 174 },
-            {"x" : 157, "y" : 174 },
-            {"x" : 216, "y" : 174 }]
-}
-robot@ev3dev[lego-crane-cuber]#
-
-So how to find the (x,y) for each square? On your EV3 run:
-$ fswebcam --device /dev/video0 --no-timestamp --no-title --no-subtitle --no-banner --no-info -s brightness=120% -r 352x240 --png 1 /tmp/rubiks_scan.png
-
-scp this file to your laptop and view it via "edisplay rubiks_scan.png".
-edisplay will display the (x, y) coordinates as you move the mouse in the image.
-Use this to find the (x, y) coordinate for each square and record it in camera.json
-""")
 
     def init_motors(self):
 
@@ -173,9 +126,6 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
             self.flip()
 
         self.shutdown = True
-
-        if self.rgb_solver:
-            self.rgb_solver.shutdown = True
 
         for x in self.motors:
             x.shutdown = True
@@ -499,36 +449,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         self.elevate(self.rows_and_cols)
 
     def scan_face(self, name):
-        """
-        The squares are numbered like so:
-
-                  01 02 03
-                  04 05 06
-                  07 08 09
-        10 11 12  19 20 21  28 29 30  37 38 39
-        13 14 15  22 23 24  31 32 33  40 41 42
-        16 17 18  25 26 27  34 35 36  43 44 45
-                  46 47 48
-                  49 50 51
-                  52 53 54
-        """
         log.info("scan_face() %s" % name)
-
-        if name == 'U':
-            init_square_index = 1
-        elif name == 'L':
-            init_square_index = 10
-        elif name == 'F':
-            init_square_index = 19
-        elif name == 'R':
-            init_square_index = 28
-        elif name == 'B':
-            init_square_index = 37
-        elif name == 'D':
-            init_square_index = 46
-        else:
-            raise Exception("Invalid face %s" % name)
-
         png_filename = '/tmp/rubiks-side-%s.png' % name
 
         if os.path.exists(png_filename):
@@ -550,44 +471,6 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         if not os.path.exists(png_filename):
             self.shutdown = True
             return
-
-        im = Image.open(png_filename)
-        pix = im.load()
-
-        for index in range(9):
-            if name == 'U' or name == 'D':
-                if index == 0:
-                    square_index = init_square_index + 6
-                elif index == 1:
-                    square_index = init_square_index + 3
-                elif index == 2:
-                    square_index = init_square_index
-                elif index == 3:
-                    square_index = init_square_index + 7
-                elif index == 4:
-                    square_index = init_square_index + 4
-                elif index == 5:
-                    square_index = init_square_index + 1
-                elif index == 6:
-                    square_index = init_square_index + 8
-                elif index == 7:
-                    square_index = init_square_index + 5
-                elif index == 8:
-                    square_index = init_square_index + 2
-            else:
-                square_index = init_square_index + index
-
-            (x, y) = self.center_pixels[index]
-            (red, green, blue) = pix[x, y]
-            log.info("square %d, (%s, %s), RGB (%d, %d, %d)" % (square_index, x, y, red, green, blue))
-
-            # colors is a dict where the square number (as an int) will be
-            # the key and a RGB tuple the value
-            self.colors[square_index] = (red, green, blue)
-
-        # Now that we know the colors, rm the file
-        # os.unlink(png_filename)
-        log.info("\n")
 
     def scan(self):
         log.info("scan()")
@@ -639,11 +522,35 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         if self.shutdown:
             return
 
+    def get_colors(self):
+
+        if self.shutdown:
+            return
+
+        # dwalton
+        subprocess.call(['scp',
+                         '/tmp/rubiks-side-*.png',
+                         'robot@%s:/tmp/' % SERVER])
+        cube_dimensions = '%dx%dx%d' % (self.rows_and_cols, self.rows_and_cols, self.rows_and_cols)
+        output = subprocess.check_output(['ssh',
+                                          'robot@%s' % SERVER,
+                                          '/home/robot/lego-crane-cuber/extract_rgb_pixels.py',
+                                          cube_dimensions]).decode('ascii')
+        self.colors = json.loads(output)
+
     def resolve_colors(self):
+
+        if self.shutdown:
+            return
+
         log.info("RGB json:\n%s\n" % json.dumps(self.colors))
         log.info("RGB pformat:\n%s\n" % pformat(self.colors))
-        self.rgb_solver.enter_scan_data(self.colors)
-        self.cube_for_resolver = self.rgb_solver.crunch_colors()
+        output = subprocess.check_output(['ssh',
+                                          'robot@%s' % SERVER,
+                                          '/home/robot/rubiks-color-resolver/resolver.py',
+                                          json.dumps(self.colors)]).decode('ascii')
+
+        self.cube_for_resolver = json.loads(output)
         log.info("Final Colors: %s" % ''.join(self.cube_for_resolver))
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
                     (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
@@ -820,7 +727,10 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         if self.shutdown:
             return
 
-        output = subprocess.check_output(['kociemba', ''.join(map(str, self.cube_for_resolver))]).decode('ascii')
+        output = subprocess.check_output(['ssh',
+                                          'robot@%s' % SERVER,
+                                          '/home/robot/lego-crane-cuber/kociemba_x86',
+                                          ''.join(map(str, self.cube_for_resolver))]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
 
@@ -960,92 +870,12 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
     def __init__(self, rows_and_cols=2, size_mm=40):
         CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
-        self.rgb_solver = RubiksColorSolver2x2x2()
 
         # These are for a 40mm 2x2x2 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
         self.rows_in_turntable_to_count_as_face_turn = 2
-
-    def scan_face(self, name):
-        """
-        The squares are numbered like so:
-
-               01 02
-               03 04
-        05 06  09 10  13 14  17 18
-        07 08  11 12  15 16  19 20
-               21 22
-               23 24
-        """
-        log.info("scan_face() %s" % name)
-
-        if name == 'U':
-            init_square_index = 1
-        elif name == 'L':
-            init_square_index = 5
-        elif name == 'F':
-            init_square_index = 9
-        elif name == 'R':
-            init_square_index = 13
-        elif name == 'B':
-            init_square_index = 17
-        elif name == 'D':
-            init_square_index = 21
-        else:
-            raise Exception("Invalid face %s" % name)
-
-        png_filename = '/tmp/rubiks-side-%s.png' % name
-
-        if os.path.exists(png_filename):
-            os.unlink(png_filename)
-
-        # capture a single png from the webcam
-        subprocess.call(['fswebcam',
-                         '--device', '/dev/video0',
-                         '--no-timestamp',
-                         '--no-title',
-                         '--no-subtitle',
-                         '--no-banner',
-                         '--no-info',
-                         '-s', 'brightness=120%',
-                         '-r', '352x240',
-                         '--png', '1',
-                         png_filename])
-
-        if not os.path.exists(png_filename):
-            self.shutdown = True
-            return
-
-        from PIL import Image
-        im = Image.open(png_filename)
-        pix = im.load()
-
-        for index in range(4):
-            if name == 'U' or name == 'D':
-                if index == 0:
-                    square_index = init_square_index + 2
-                elif index == 1:
-                    square_index = init_square_index
-                elif index == 2:
-                    square_index = init_square_index + 3
-                elif index == 3:
-                    square_index = init_square_index + 1
-            else:
-                square_index = init_square_index + index
-
-            (x, y) = self.center_pixels[index]
-            (red, green, blue) = pix[x, y]
-            log.info("square %d, (%s, %s), RGB (%d, %d, %d)" % (square_index, x, y, red, green, blue))
-
-            # colors is a dict where the square number (as an int) will be
-            # the key and a RGB tuple the value
-            self.colors[square_index] = (red, green, blue)
-
-        # Now that we know the colors, rm the file
-        # os.unlink(png_filename)
-        log.info("\n")
 
     def run_actions(self, actions):
         """
@@ -1146,7 +976,10 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        output = subprocess.check_output(['./rubiks_2x2x2_solver.py', ''.join(self.cube_for_resolver)]).decode('ascii')
+        output = subprocess.check_output(['ssh',
+                                          'robot@%s' % SERVER,
+                                          '/home/robot/lego-crane-cuber/rubiks_2x2x2_solver.py',
+                                          ''.join(self.cube_for_resolver)]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
 
@@ -1174,6 +1007,7 @@ if __name__ == '__main__':
 
         while not cc.shutdown:
             cc.scan()
+            cc.get_colors()
             cc.resolve_colors()
             cc.resolve_moves()
             cc.wait_for_touch_sensor()
