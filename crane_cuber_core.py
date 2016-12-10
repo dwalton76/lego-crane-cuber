@@ -517,6 +517,7 @@ class CraneCuber3x3x3(object):
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
+        self.flip_settle_cube()
 
         if self.shutdown:
             return
@@ -743,7 +744,6 @@ class CraneCuber3x3x3(object):
         Test the three motors
         """
 
-        '''
         input('Press ENTER to flip (to forward)')
         self.flip()
 
@@ -815,7 +815,6 @@ class CraneCuber3x3x3(object):
 
         if self.shutdown:
             return
-        '''
 
         input('Press ENTER to rotate 1 row clockwise')
         self.elevate(1)
@@ -986,34 +985,3 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
         if not self.flipper_at_init:
             self.flip()
-
-if __name__ == '__main__':
-
-    # logging.basicConfig(filename='rubiks.log',
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
-    log = logging.getLogger(__name__)
-
-    # Color the errors and warnings in red
-    logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
-    logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
-
-    cc = CraneCuber2x2x2()
-
-    try:
-        # cc.test_basics()
-        # cc.test_patterns()
-
-        while not cc.shutdown:
-            cc.scan()
-            cc.get_colors()
-            cc.resolve_colors()
-            # cc.wait_for_touch_sensor()
-            cc.resolve_moves()
-            cc.wait_for_touch_sensor()
-        cc.shutdown_robot()
-
-    except Exception as e:
-        log.exception(e)
-        cc.shutdown_robot()
-        sys.exit(1)
