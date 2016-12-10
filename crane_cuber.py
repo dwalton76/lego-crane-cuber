@@ -254,7 +254,7 @@ class CraneCuber3x3x3(object):
             return
 
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
-                                    speed_sp=FLIPPER_SPEED/2,
+                                    speed_sp=int(FLIPPER_SPEED/3),
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
@@ -262,7 +262,7 @@ class CraneCuber3x3x3(object):
         self.flipper.wait_while('running', timeout=1000)
 
         self.flipper.run_to_abs_pos(position_sp=0,
-                                    speed_sp=FLIPPER_SPEED/2,
+                                    speed_sp=int(FLIPPER_SPEED/3),
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
@@ -464,7 +464,7 @@ class CraneCuber3x3x3(object):
                          '--no-info',
                          '-s', 'brightness=120%',
                          '-r', '352x240',
-                         '--png', '9',
+                         '--png', '1',
                          png_filename])
 
         if not os.path.exists(png_filename):
@@ -526,15 +526,17 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        # dwalton
-        subprocess.call(['scp',
-                         '/tmp/rubiks-side-*.png',
-                         'robot@%s:/tmp/' % SERVER])
+        cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % SERVER
+        log.info(cmd)
+        subprocess.call(cmd, shell=True)
+
         cube_dimensions = '%dx%dx%d' % (self.rows_and_cols, self.rows_and_cols, self.rows_and_cols)
-        output = subprocess.check_output(['ssh',
-                                          'robot@%s' % SERVER,
-                                          '/home/robot/lego-crane-cuber/extract_rgb_pixels.py',
-                                          cube_dimensions]).decode('ascii')
+        cmd = ['ssh',
+               'robot@%s' % SERVER,
+               '/home/robot/lego-crane-cuber/extract_rgb_pixels.py',
+               cube_dimensions]
+        log.info(' '.join(cmd))
+        output = subprocess.check_output(cmd).decode('ascii')
         self.colors = json.loads(output)
 
     def resolve_colors(self):
@@ -544,13 +546,11 @@ class CraneCuber3x3x3(object):
 
         log.info("RGB json:\n%s\n" % json.dumps(self.colors))
         log.info("RGB pformat:\n%s\n" % pformat(self.colors))
-        output = subprocess.check_output(['ssh',
-                                          'robot@%s' % SERVER,
-                                          '/home/robot/rubiks-color-resolver/resolver.py',
-                                          json.dumps(self.colors)]).decode('ascii')
-
-        self.cube_for_resolver = json.loads(output)
-        log.info("Final Colors: %s" % ''.join(self.cube_for_resolver))
+        self.cube_for_resolver = subprocess.check_output(['ssh',
+                                                          'robot@%s' % SERVER,
+                                                          '/home/robot/rubiks-color-resolver/resolver.py',
+                                                          "'%s'" % json.dumps(self.colors)]).decode('ascii')
+        log.info("Final Colors: %s" % self.cube_for_resolver)
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
                     (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
@@ -729,7 +729,7 @@ class CraneCuber3x3x3(object):
         output = subprocess.check_output(['ssh',
                                           'robot@%s' % SERVER,
                                           '/home/robot/lego-crane-cuber/kociemba_x86',
-                                          ''.join(map(str, self.cube_for_resolver))]).decode('ascii')
+                                          self.cube_for_resolver]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
 
@@ -1008,6 +1008,7 @@ if __name__ == '__main__':
             cc.scan()
             cc.get_colors()
             cc.resolve_colors()
+            # cc.wait_for_touch_sensor()
             cc.resolve_moves()
             cc.wait_for_touch_sensor()
         cc.shutdown_robot()
