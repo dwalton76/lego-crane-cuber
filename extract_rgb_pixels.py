@@ -37,7 +37,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
 
 def get_center_pixel_coordinates(key):
     center_pixels = []
-    calibrate_filename = 'camera.json'
+    calibrate_filename = '/home/robot/lego-crane-cuber/camera.json'
 
     if not os.path.exists(calibrate_filename):
         print_calibrate_howto()
