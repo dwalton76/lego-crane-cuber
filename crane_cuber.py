@@ -423,7 +423,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
 
         if rows:
             # 16 studs at 8mm per stud = 128mm
-            flipper_plus_holder_height_studs_mm =  128
+            flipper_plus_holder_height_studs_mm = 122
             cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
             final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
 
@@ -729,7 +729,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         ' means rotate the face counter clockwise
         """
 
-        log.info('Action (kociemba): %s' % ' '.join(actions))
+        log.info('Moves: %s' % ' '.join(actions))
         total_actions = len(actions)
 
         for (index, action) in enumerate(actions):
@@ -834,6 +834,8 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
         """
         Test the three motors
         """
+
+        '''
         input('Press ENTER to flip (to forward)')
         self.flip()
 
@@ -905,6 +907,7 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
 
         if self.shutdown:
             return
+        '''
 
         input('Press ENTER to rotate 1 row clockwise')
         self.elevate(1)
@@ -1045,12 +1048,96 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         # os.unlink(png_filename)
         log.info("\n")
 
+    def run_actions(self, actions):
+        """
+        action will be a series of moves such as
+        D2 R' D' F2 B D R2 D2 R' F2 D' F2 U' B2 L2 U2 D R2 U
+
+        The first letter is the face name
+        2 means two quarter turns (rotate 180)
+        ' means rotate the face counter clockwise
+        """
+
+        log.info('Moves: %s' % ' '.join(actions))
+        total_actions = len(actions)
+
+        for (index, action) in enumerate(actions):
+            log.info("Move %d/%d: %s" % (index, total_actions, action))
+
+            if self.shutdown:
+                break
+
+            if action.endswith("'") or action.endswith("’"):
+                clockwise = False
+            else:
+                clockwise = True
+
+            if '2' in action:
+                quarter_turns = 2
+            else:
+                quarter_turns = 1
+
+            target_face = action[0]
+            direction = None
+
+            if self.facing_up == 'U':
+                if target_face == 'U':
+                    self.elevate(1)
+                else:
+                    direction = self.get_direction(target_face)
+
+            elif self.facing_up == 'L':
+                if target_face == 'L':
+                    self.elevate(1)
+                else:
+                    direction = self.get_direction(target_face)
+
+            elif self.facing_up == 'F':
+                if target_face == 'F':
+                    self.elevate(1)
+                else:
+                    direction = self.get_direction(target_face)
+
+            elif self.facing_up == 'R':
+                if target_face == 'R':
+                    self.elevate(1)
+                else:
+                    direction = self.get_direction(target_face)
+
+            elif self.facing_up == 'B':
+                if target_face == 'B':
+                    self.elevate(1)
+                else:
+                    direction = self.get_direction(target_face)
+
+            elif self.facing_up == 'D':
+                if target_face == 'D':
+                    self.elevate(1)
+                else:
+                    direction = self.get_direction(target_face)
+
+            else:
+                raise Exception("Invalid face %s" % self.facing_up)
+
+            if direction:
+                if direction == 'north':
+                    self.move_north_to_top()
+                elif direction == 'west':
+                    self.move_west_to_top()
+                elif direction == 'south':
+                    self.move_south_to_top()
+                elif direction == 'east':
+                    self.move_east_to_top()
+
+            self.rotate(clockwise, quarter_turns)
+            log.info("\n\n\n\n")
+
     def resolve_moves(self):
 
         if self.shutdown:
             return
 
-        actions = subprocess.check_output(['./rubiks_2x2x2_solver.py', self.cube_for_resolver])
+        output = subprocess.check_output(['./rubiks_2x2x2_solver.py', ''.join(self.cube_for_resolver)]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
 
