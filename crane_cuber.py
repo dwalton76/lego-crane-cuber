@@ -22,7 +22,7 @@ import time
 log = logging.getLogger(__name__)
 
 # http://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id
-SERVER = 192.168.0.4
+SERVER = '192.168.0.4'
 
 # negative moves to init position
 # positive moves towards camera
@@ -70,7 +70,6 @@ class CraneCuber3x3x3(object):
         self.turntable= LargeMotor(OUTPUT_C)
         self.touch_sensor = TouchSensor()
         self.motors = [self.elevator, self.flipper, self.turntable]
-        self.cube = {}
         self.rows_in_turntable = 0
         self.facing_up = 'U'
         self.facing_down = 'D'
