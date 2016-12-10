@@ -7,6 +7,7 @@ A Rubiks cube solving robot made from EV3 + 42009
 
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
 from math import pi
+from PIL import Image
 from pprint import pformat
 from rubikscolorresolver import RubiksColorSolver2x2x2, RubiksColorSolver3x3x3
 from time import sleep
@@ -543,14 +544,13 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
                          '--no-info',
                          '-s', 'brightness=120%',
                          '-r', '352x240',
-                         '--png', '1',
+                         '--png', '9',
                          png_filename])
 
         if not os.path.exists(png_filename):
             self.shutdown = True
             return
 
-        from PIL import Image
         im = Image.open(png_filename)
         pix = im.load()
 
@@ -752,7 +752,6 @@ Use this to find the (x, y) coordinate for each square and record it in camera.j
             direction = None
 
             if self.facing_up == 'U':
-                # dwalton - fix this for 2x2x2?
                 if target_face == 'U':
                     self.elevate(1)
                 elif target_face == 'D':
@@ -967,7 +966,7 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
-        self.rows_in_turntable_to_count_as_face_turn = 1
+        self.rows_in_turntable_to_count_as_face_turn = 2
 
     def scan_face(self, name):
         """
@@ -1063,6 +1062,11 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
         for (index, action) in enumerate(actions):
             log.info("Move %d/%d: %s" % (index, total_actions, action))
+            # log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
+            #         (self.facing_north, self.facing_west,
+            #          self.facing_south, self.facing_east,
+            #          self.facing_up, self.facing_down))
+            # self.wait_for_touch_sensor()
 
             if self.shutdown:
                 break
@@ -1130,7 +1134,12 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
                     self.move_east_to_top()
 
             self.rotate(clockwise, quarter_turns)
+            # log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
+            #         (self.facing_north, self.facing_west,
+            #          self.facing_south, self.facing_east,
+            #          self.facing_up, self.facing_down))
             log.info("\n\n\n\n")
+            # self.wait_for_touch_sensor()
 
     def resolve_moves(self):
 
