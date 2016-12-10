@@ -5,7 +5,7 @@ CraneCuber
 A Rubiks cube solving robot made from EV3 + 42009
 """
 
-from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
+from ev3dev.ev3 import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor, Leds
 from math import pi
 from pprint import pformat
 from rubikscolorresolver import RubiksColorSolver2x2x2, RubiksColorSolver3x3x3
@@ -61,6 +61,8 @@ ELEVATOR_SPEED_DOWN_SLOW = 200
 class CraneCuber3x3x3(object):
 
     def __init__(self, rows_and_cols=3, size_mm=57):
+        Leds.set_color(Leds.LEFT, Leds.AMBER)
+        Leds.set_color(Leds.RIGHT, Leds.AMBER)
         self.shutdown = False
         self.rows_and_cols = rows_and_cols
         self.size_mm = size_mm

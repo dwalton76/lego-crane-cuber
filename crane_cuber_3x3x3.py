@@ -5,6 +5,7 @@ CraneCuber
 A Rubiks cube solving robot made from EV3 + 42009
 """
 
+from ev3dev.ev3 import Leds
 from crane_cuber_core import CraneCuber3x3x3
 import logging
 import sys
@@ -29,9 +30,16 @@ try:
         cc.resolve_colors()
         cc.resolve_moves()
         cc.wait_for_touch_sensor()
+
     cc.shutdown_robot()
+    Leds.set_color(Leds.LEFT, Leds.GREEN)
+    Leds.set_color(Leds.RIGHT, Leds.GREEN)
 
 except Exception as e:
+    Leds.set_color(Leds.LEFT, Leds.RED)
+    Leds.set_color(Leds.RIGHT, Leds.RED)
     log.exception(e)
     cc.shutdown_robot()
+    Leds.set_color(Leds.LEFT, Leds.GREEN)
+    Leds.set_color(Leds.RIGHT, Leds.GREEN)
     sys.exit(1)
