@@ -71,7 +71,7 @@ def extract_rgb_pixels_2x2x2():
            23 24
     """
     colors = {}
-    center_pixels = get_center_pixel_coordinates('3x3x3')
+    center_pixels = get_center_pixel_coordinates('2x2x2')
 
     for side in ('U', 'L', 'F', 'R', 'B', 'D'):
         if side == 'U':
