@@ -528,7 +528,7 @@ class CraneCuber3x3x3(object):
         cmd = ['ssh',
                'robot@%s' % SERVER,
                '/home/robot/lego-crane-cuber/extract_rgb_pixels.py',
-               cube_dimensions]
+               str(self.rows_and_cols)]
         log.info(' '.join(cmd))
         output = subprocess.check_output(cmd).decode('ascii')
         self.colors = json.loads(output)
