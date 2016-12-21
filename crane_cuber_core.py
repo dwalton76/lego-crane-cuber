@@ -971,8 +971,9 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
                                           'robot@%s' % SERVER,
                                           '/home/robot/lego-crane-cuber/rubiks_2x2x2_solver.py',
                                           ''.join(self.cube_for_resolver)]).decode('ascii')
-        actions = output.strip().split()
-        self.run_actions(actions)
+        if output != 'Cube is already solved':
+            actions = output.strip().split()
+            self.run_actions(actions)
 
         self.elevate(0)
 
