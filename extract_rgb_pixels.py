@@ -72,16 +72,48 @@ def rotate_2d_array(original):
     return result
 
 
+def compress_2d_array(original):
+    """
+    Convert 2d array to a 1d array
+    """
+    result = []
+    for row in original:
+        for col in row:
+            result.append(col)
+    return result
+
+
 def extract_rgb_pixels(size):
     dimensions = "%dx%dx%d" % (size, size, size)
     colors = {}
     center_pixels = get_center_pixel_coordinates(dimensions)
-    squares_per_side = math.pow(size, 2)
+    squares_per_side = int(math.pow(size, 2))
 
-    square_indexes = list(range(1, squares_per_side+1))
-    square_indexes_rotated = rotate_2d_array(square_indexes)
+    # print the cube layout to make the debugs easier to read
+    if size == 2:
+        log.info("""
+               01 02
+               03 04
+        05 06  09 10  13 14  17 18
+        07 08  11 12  15 16  19 20
+               21 22
+               23 24
+        """)
 
-    for (side_index, side) in enumerate('U', 'L', 'F', 'R', 'B', 'D'):
+    elif size == 3:
+        log.info("""
+           01 02 03
+           04 05 06
+           07 08 09
+ 10 11 12  19 20 21  28 29 30  37 38 39
+ 13 14 15  22 23 24  31 32 33  40 41 42
+ 16 17 18  25 26 27  34 35 36  43 44 45
+           46 47 48
+           49 50 51
+           52 53 54
+        """)
+
+    for (side_index, side) in enumerate(('U', 'L', 'F', 'R', 'B', 'D')):
         '''
         squares are numbered like so:
 
@@ -96,26 +128,40 @@ def extract_rgb_pixels(size):
         '''
         init_square_index = (side_index * squares_per_side) + 1
 
+        square_indexes = []
+        for row in range(size):
+            square_indexes_for_row = []
+            for col in range(size):
+                square_indexes_for_row.append(init_square_index + (row * size) + col)
+            square_indexes.append(square_indexes_for_row)
+        log.info("%s square_indexes %s" % (side, pformat(square_indexes)))
+
         '''
         The L, F, R, and B sides are simple, for the U and D sides the cube in
         the png is rotated by 90 degrees so we need to rotate our array of
         square indexes by 90 degrees to compensate
         '''
         if side == 'U' or side == 'D':
-            my_indexes = square_indexes_rotated
+            my_indexes = rotate_2d_array(square_indexes)
         else:
             my_indexes = square_indexes
 
+        log.info("%s my_indexes %s" % (side, pformat(my_indexes)))
         filename = "/tmp/rubiks-side-%s.png" % side
         im = Image.open(filename)
         pix = im.load()
 
-        for index in my_indexes:
-            square_index = init_square_index + index
+        my_indexes = compress_2d_array(my_indexes)
+        log.info("%s my_indexes (final) %s" % (side, pformat(my_indexes)))
+
+        # for index in my_indexes:
+        for index in range(squares_per_side):
+            square_index = my_indexes[index]
 
             (x, y) = center_pixels[index]
             (red, green, blue) = pix[x, y]
-            log.info("square %d, (%s, %s), RGB (%d, %d, %d)" % (square_index, x, y, red, green, blue))
+            log.info("square %d, pixels (%s, %s), RGB (%d, %d, %d)" %
+                (square_index, x, y, red, green, blue))
 
             # colors is a dict where the square number (as an int) will be
             # the key and a RGB tuple the value
