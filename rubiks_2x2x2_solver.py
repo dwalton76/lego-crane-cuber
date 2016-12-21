@@ -62,7 +62,11 @@ for h in[0, 1] * 6:
         for y in range(12):
             d[h][s] = x + [y - [1, -1, 1, 3][h * y % 4]]
             if s in d[1 - h]:
-                result = o('RUF'[x / 4] + " 2'"[x % 4]for x in d[0][s] + d[1][s][::-1])
+                try:
+                    result = o('RUF'[x / 4] + " 2'"[x % 4]for x in d[0][s] + d[1][s][::-1])
+                except IndexError:
+                    print "Cube is already solved"
+                    sys.exit(0)
                 result = result.replace('2', '2 ')
                 result = result.replace("'", "' ")
                 result = result.split()
