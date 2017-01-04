@@ -183,7 +183,7 @@ if __name__ == '__main__':
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
     parser = argparse.ArgumentParser(description="Extract RGB values from rubiks cube images")
-    parser.add_argument('--size', type=int, help='"3" for 3x3x3, "2" for 2x2x2, etc')
+    parser.add_argument('size', type=int, help='"3" for 3x3x3, "2" for 2x2x2, etc')
     args = parser.parse_args()
 
     print(json.dumps(extract_rgb_pixels(args.size, False)))

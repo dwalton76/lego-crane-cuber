@@ -528,7 +528,6 @@ class CraneCuber3x3x3(object):
         cmd = ['ssh',
                'robot@%s' % SERVER,
                '/home/robot/lego-crane-cuber/extract_rgb_pixels.py',
-               '--size',
                str(self.rows_and_cols)]
         log.info(' '.join(cmd))
         output = subprocess.check_output(cmd).decode('ascii')
@@ -724,7 +723,7 @@ class CraneCuber3x3x3(object):
 
         output = subprocess.check_output(['ssh',
                                           'robot@%s' % SERVER,
-                                          '/home/robot/lego-crane-cuber/kociemba_x86',
+                                          '/home/robot/lego-crane-cuber/solvers/3x3x3/kociemba_x86',
                                           self.cube_for_resolver]).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
@@ -971,7 +970,7 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
         output = subprocess.check_output(['ssh',
                                           'robot@%s' % SERVER,
-                                          '/home/robot/lego-crane-cuber/rubiks_2x2x2_solver.py',
+                                          '/home/robot/lego-crane-cuber/solvers/2x2x2/rubiks_2x2x2_solver.py',
                                           ''.join(self.cube_for_resolver)]).decode('ascii')
         if output != 'Cube is already solved':
             actions = output.strip().split()
