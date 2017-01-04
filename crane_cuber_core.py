@@ -528,6 +528,7 @@ class CraneCuber3x3x3(object):
         cmd = ['ssh',
                'robot@%s' % SERVER,
                '/home/robot/lego-crane-cuber/extract_rgb_pixels.py',
+               '--size',
                str(self.rows_and_cols)]
         log.info(' '.join(cmd))
         output = subprocess.check_output(cmd).decode('ascii')
@@ -543,6 +544,7 @@ class CraneCuber3x3x3(object):
         self.cube_for_resolver = subprocess.check_output(['ssh',
                                                           'robot@%s' % SERVER,
                                                           '/home/robot/rubiks-color-resolver/resolver.py',
+                                                          '--rgb',
                                                           "'%s'" % json.dumps(self.colors)]).decode('ascii')
         log.info("Final Colors: %s" % self.cube_for_resolver)
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
@@ -979,3 +981,29 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
         if not self.flipper_at_init:
             self.flip()
+
+
+class CraneCuber4x4x4(CraneCuber3x3x3):
+
+    def __init__(self, rows_and_cols=4, size_mm=62):
+        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+
+        # These are for a 62mm 4x4x4 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 53
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -85
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 32
+        self.rows_in_turntable_to_count_as_face_turn = 4
+
+
+class CraneCuber6x6x6x(CraneCuber3x3x3):
+
+    def __init__(self, rows_and_cols=6, size_mm=67):
+        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+
+        # These are for a 67mm 6x6x6 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 29
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -42
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
+        self.rows_in_turntable_to_count_as_face_turn = 6
+
+
