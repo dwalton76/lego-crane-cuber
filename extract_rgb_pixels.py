@@ -29,7 +29,7 @@ robot@ev3dev[lego-crane-cuber]# cat camera.json
 robot@ev3dev[lego-crane-cuber]#
 
 So how to find the (x,y) for each square? On your EV3 run:
-$ fswebcam --device /dev/video0 --no-timestamp --no-title --no-subtitle --no-banner --no-info -s brightness=120% -r 352x240 --png 1 /tmp/rubiks_scan.png
+$ fswebcam --device /dev/video0 --no-timestamp --no-title --no-subtitle --no-banner --no-info -s brightness=120% -r 320x240 --png 1 /tmp/rubiks_scan.png
 
 scp this file to your laptop and view it via "edisplay rubiks_scan.png".
 edisplay will display the (x, y) coordinates as you move the mouse in the image.
