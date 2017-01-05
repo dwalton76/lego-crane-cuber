@@ -28,7 +28,7 @@ SERVER = '192.168.0.4'
 # positive moves towards camera
 # This should be 90 degrees but some extra is needed to account for play between the gears
 FLIPPER_DEGREES = 120
-FLIPPER_SPEED = 600
+FLIPPER_SPEED = 300
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -251,14 +251,14 @@ class CraneCuber3x3x3(object):
             return
 
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
-                                    speed_sp=int(FLIPPER_SPEED/3),
+                                    speed_sp=int(FLIPPER_SPEED/2),
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
         self.flipper.wait_while('running', timeout=1000)
 
         self.flipper.run_to_abs_pos(position_sp=0,
-                                    speed_sp=int(FLIPPER_SPEED/3),
+                                    speed_sp=int(FLIPPER_SPEED/2),
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
@@ -276,9 +276,20 @@ class CraneCuber3x3x3(object):
         else:
             final_pos = 0
 
+        # If the elevator is raised then the cube is not in the flipper so we
+        # can flip it pretty quickly.  If the cube is in the flipper though we
+        # have to flip more slowly, if you flip too fast the momentum can cause
+        # the cube to slide a little when the flipper stops.  When the cube
+        # slides like this it is no longer lined up with the turntable above so
+        # when we raise the cube it jams up.
+        if self.rows_in_turntable == 0:
+            speed = FLIPPER_SPEED
+        else:
+            speed = FLIPPER_SPEED * 2
+
         start = datetime.datetime.now()
         self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                    speed_sp=FLIPPER_SPEED,
+                                    speed_sp=speed,
                                     ramp_up_sp=100,
                                     ramp_down_sp=100,
                                     stop_action='hold')
@@ -596,6 +607,16 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(rows)
 
+    def move_down_to_top(self, rows=1):
+        log.info("move_down_to_top() - flipper_at_init %s" % self.flipper_at_init)
+        self.elevate(0)
+        self.flip()
+        self.elevate_max()
+        self.flip() # empty flip
+        self.elevate(0)
+        self.flip()
+        self.elevate(rows)
+
     def get_direction(self, target_face):
         """
         target_face is in one of four locations, call them north, south, east
@@ -617,8 +638,13 @@ class CraneCuber3x3x3(object):
         if self.facing_east == target_face:
             return 'east'
 
-        raise Exception("Could not find target_face %s, north %s, west %s, south %s, east %" %
-                        (target_face, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
+        if self.facing_down == target_face:
+            return 'down'
+
+        raise Exception("Could not find target_face %s, north %s, west %s, south %s, east %s, up %s, down %s" %
+                        (target_face,
+                         self.facing_north, self.facing_west, self.facing_south, self.facing_east,
+                         self.facing_up, self.facing_down))
 
     def run_actions(self, actions):
         """
@@ -712,6 +738,10 @@ class CraneCuber3x3x3(object):
                     self.move_south_to_top()
                 elif direction == 'east':
                     self.move_east_to_top()
+                elif direction == 'down':
+                    self.move_down_to_top(rows)
+                else:
+                    raise Exception("Unsupported direction %s" % direction)
 
             self.rotate(clockwise, quarter_turns)
             log.info("\n\n\n\n")
@@ -954,6 +984,10 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
                     self.move_south_to_top()
                 elif direction == 'east':
                     self.move_east_to_top()
+                elif direction == 'down':
+                    self.move_down_to_top(rows)
+                else:
+                    raise Exception("Unsupported direction %s" % direction)
 
             self.rotate(clockwise, quarter_turns)
             # log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
@@ -1011,7 +1045,6 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         log.info('Moves: %s' % ' '.join(actions))
         total_actions = len(actions)
 
-        # dwalton - here now
         for (index, action) in enumerate(actions):
             log.info("Move %d/%d: %s" % (index, total_actions, action))
 
@@ -1087,6 +1120,10 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
                     self.move_south_to_top(rows)
                 elif direction == 'east':
                     self.move_east_to_top(rows)
+                elif direction == 'down':
+                    self.move_down_to_top(rows)
+                else:
+                    raise Exception("Unsupported direction %s" % direction)
 
             self.rotate(clockwise, quarter_turns)
             log.info("\n\n\n\n")
@@ -1098,6 +1135,8 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
 
         cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (SERVER, ''.join(self.cube_for_resolver))
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1]
+        actions = output.strip().split()
+        self.run_actions(actions)
 
         self.elevate(0)
 
