@@ -28,6 +28,7 @@ try:
         cc.scan()
         cc.get_colors()
         cc.resolve_colors()
+        # cc.wait_for_touch_sensor()
         cc.resolve_moves()
         cc.wait_for_touch_sensor()
 
