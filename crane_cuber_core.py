@@ -129,9 +129,6 @@ class CraneCuber3x3x3(object):
         self.shutdown = True
 
         for x in self.motors:
-            x.shutdown = True
-
-        for x in self.motors:
             x.stop(stop_action='brake')
 
     def signal_term_handler(self, signal, frame):
@@ -293,6 +290,7 @@ class CraneCuber3x3x3(object):
         prev_pos = None
 
         # Make sure we stopped where we should have
+        '''
         while self.flipper.position != final_pos:
             log.info("flip() position is %d, it should be %d" % (self.flipper.position, final_pos))
             self.flipper.run_to_abs_pos(position_sp=final_pos,
@@ -303,6 +301,7 @@ class CraneCuber3x3x3(object):
             if prev_pos is not None and self.flipper.position == prev_pos:
                 break
             prev_pos = self.flipper.position
+        '''
 
         # facing_west and facing_east won't change
         orig_north = self.facing_north
@@ -426,6 +425,7 @@ class CraneCuber3x3x3(object):
         # The elevator position has to be exact so if we went to far (this can
         # happen due to the high speeds that we use) adjust slowly so we end up
         # exactly where we need to be
+        '''
         while self.elevator.position != final_pos:
             log.info("elevate() position is %d, it should be %d" % (self.elevator.position, final_pos))
             self.elevator.run_to_abs_pos(position_sp=final_pos,
@@ -436,6 +436,7 @@ class CraneCuber3x3x3(object):
             if prev_pos is not None and self.elevator.position == prev_pos:
                 break
             prev_pos = self.elevator.position
+        '''
 
     def elevate_max(self):
         self.elevate(self.rows_and_cols)
@@ -543,7 +544,6 @@ class CraneCuber3x3x3(object):
         self.cube_for_resolver = subprocess.check_output(['ssh',
                                                           'robot@%s' % SERVER,
                                                           '/home/robot/rubiks-color-resolver/resolver.py',
-                                                          '--rgb',
                                                           "'%s'" % json.dumps(self.colors)]).decode('ascii')
         log.info("Final Colors: %s" % self.cube_for_resolver)
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
