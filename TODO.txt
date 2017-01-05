@@ -6,5 +6,6 @@ DONE - write some test cases for rubikscolorresolver
 DONE - take color samples of solved 4x4x4 and 6x6x6, add them to rubiks-color-resolver
 DONE - update rubikscolorresolver/__init__.py to work for 4x4x4
 DONE - update rubikscolorresolver/__init__.py to work for 6x6x6
+- collect a ton of 2x2x2 samples and then ungolf the solver to make it readable
 - solve a 4x4x4
 - solve a 6x6x6
