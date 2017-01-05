@@ -158,6 +158,9 @@ class CraneCuber3x3x3(object):
                                       stop_action='hold',
                                       ramp_up_sp=0)
         self.turntable.wait_while('running')
+
+        # uncomment this if you want to test with 100% accurate rotate position
+        '''
         prev_pos = None
 
         while self.turntable.position != final_pos:
@@ -169,6 +172,7 @@ class CraneCuber3x3x3(object):
             if prev_pos is not None and self.turntable.position == prev_pos:
                 break
             prev_pos = self.turntable.position
+        '''
 
     def rotate(self, clockwise, quarter_turns):
 
@@ -298,10 +302,12 @@ class CraneCuber3x3x3(object):
         finish = datetime.datetime.now()
         delta_ms = (finish - start).microseconds / 1000
         log.info("flip() to final_pos %s took %dms" % (final_pos, delta_ms))
+
+        # uncomment this if you want to test with 100% accurate flip position
+        '''
         prev_pos = None
 
         # Make sure we stopped where we should have
-        '''
         while self.flipper.position != final_pos:
             log.info("flip() position is %d, it should be %d" % (self.flipper.position, final_pos))
             self.flipper.run_to_abs_pos(position_sp=final_pos,
@@ -431,12 +437,11 @@ class CraneCuber3x3x3(object):
         finish = datetime.datetime.now()
         delta_ms = (finish - start).microseconds / 1000
         log.info("elevate() took %dms" % delta_ms)
+
+        # uncomment this if you want to test with 100% accurate elevate position
+        '''
         prev_pos = None
 
-        # The elevator position has to be exact so if we went to far (this can
-        # happen due to the high speeds that we use) adjust slowly so we end up
-        # exactly where we need to be
-        '''
         while self.elevator.position != final_pos:
             log.info("elevate() position is %d, it should be %d" % (self.elevator.position, final_pos))
             self.elevator.run_to_abs_pos(position_sp=final_pos,
@@ -649,11 +654,16 @@ class CraneCuber3x3x3(object):
     def run_actions(self, actions):
         """
         action will be a series of moves such as
-        D2 R' D' F2 B D R2 D2 R' F2 D' F2 U' B2 L2 U2 D R2 U
+        D'  B2  Rw' Uw  R2  Fw  D   Rw2 B   R2  Uw  D2  Rw2 U2  Fw2 U2  L   F
+        R   Uw2 B'  R   Uw2 L'  D   B   L2  U   B2  D   B2  F'  U'  R   B2  R2
+        F2  R'  B2  F2  D2  L'  U2  z'
 
-        The first letter is the face name
-        2 means two quarter turns (rotate 180)
-        ' means rotate the face counter clockwise
+        https://www.randelshofer.ch/cubetwister/doc/notations/wca_4x4.html
+        - the first letter is the face name
+        - the w means turn both layers of that face
+        - 2 means two quarter turns (rotate 180)
+        - ' means rotate counter clockwise
+        - ignore the x, y, z at the end, this is just rotating the entire cube to get the F side back to the front
         """
 
         log.info('Moves: %s' % ' '.join(actions))
@@ -664,6 +674,9 @@ class CraneCuber3x3x3(object):
 
             if self.shutdown:
                 break
+
+            if action.startswith('x') or action.startswith('y') or action.startswith('z'):
+                continue
 
             if action.endswith("'") or action.endswith("’"):
                 clockwise = False
@@ -678,51 +691,44 @@ class CraneCuber3x3x3(object):
             target_face = action[0]
             direction = None
 
+            if 'w' in action:
+                rows = 2
+            else:
+                rows = 1
+
             if self.facing_up == 'U':
                 if target_face == 'U':
-                    self.elevate(1)
-                elif target_face == 'D':
-                    self.elevate(2)
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'L':
                 if target_face == 'L':
-                    self.elevate(1)
-                elif target_face == 'R':
-                    self.elevate(2)
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'F':
                 if target_face == 'F':
-                    self.elevate(1)
-                elif target_face == 'B':
-                    self.elevate(2)
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'R':
                 if target_face == 'R':
-                    self.elevate(1)
-                elif target_face == 'L':
-                    self.elevate(2)
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'B':
                 if target_face == 'B':
-                    self.elevate(1)
-                elif target_face == 'F':
-                    self.elevate(2)
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'D':
                 if target_face == 'D':
-                    self.elevate(1)
-                elif target_face == 'U':
-                    self.elevate(2)
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
@@ -731,13 +737,13 @@ class CraneCuber3x3x3(object):
 
             if direction:
                 if direction == 'north':
-                    self.move_north_to_top()
+                    self.move_north_to_top(rows)
                 elif direction == 'west':
-                    self.move_west_to_top()
+                    self.move_west_to_top(rows)
                 elif direction == 'south':
-                    self.move_south_to_top()
+                    self.move_south_to_top(rows)
                 elif direction == 'east':
-                    self.move_east_to_top()
+                    self.move_east_to_top(rows)
                 elif direction == 'down':
                     self.move_down_to_top(rows)
                 else:
@@ -899,104 +905,6 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
         self.rows_in_turntable_to_count_as_face_turn = 2
 
-    def run_actions(self, actions):
-        """
-        action will be a series of moves such as
-        D2 R' D' F2 B D R2 D2 R' F2 D' F2 U' B2 L2 U2 D R2 U
-
-        The first letter is the face name
-        2 means two quarter turns (rotate 180)
-        ' means rotate the face counter clockwise
-        """
-
-        log.info('Moves: %s' % ' '.join(actions))
-        total_actions = len(actions)
-
-        for (index, action) in enumerate(actions):
-            log.info("Move %d/%d: %s" % (index, total_actions, action))
-            # log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
-            #         (self.facing_north, self.facing_west,
-            #          self.facing_south, self.facing_east,
-            #          self.facing_up, self.facing_down))
-            # self.wait_for_touch_sensor()
-
-            if self.shutdown:
-                break
-
-            if action.endswith("'") or action.endswith("’"):
-                clockwise = False
-            else:
-                clockwise = True
-
-            if '2' in action:
-                quarter_turns = 2
-            else:
-                quarter_turns = 1
-
-            target_face = action[0]
-            direction = None
-
-            if self.facing_up == 'U':
-                if target_face == 'U':
-                    self.elevate(1)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'L':
-                if target_face == 'L':
-                    self.elevate(1)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'F':
-                if target_face == 'F':
-                    self.elevate(1)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'R':
-                if target_face == 'R':
-                    self.elevate(1)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'B':
-                if target_face == 'B':
-                    self.elevate(1)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'D':
-                if target_face == 'D':
-                    self.elevate(1)
-                else:
-                    direction = self.get_direction(target_face)
-
-            else:
-                raise Exception("Invalid face %s" % self.facing_up)
-
-            if direction:
-                if direction == 'north':
-                    self.move_north_to_top()
-                elif direction == 'west':
-                    self.move_west_to_top()
-                elif direction == 'south':
-                    self.move_south_to_top()
-                elif direction == 'east':
-                    self.move_east_to_top()
-                elif direction == 'down':
-                    self.move_down_to_top(rows)
-                else:
-                    raise Exception("Unsupported direction %s" % direction)
-
-            self.rotate(clockwise, quarter_turns)
-            # log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
-            #         (self.facing_north, self.facing_west,
-            #          self.facing_south, self.facing_east,
-            #          self.facing_up, self.facing_down))
-            log.info("\n\n\n\n")
-            # self.wait_for_touch_sensor()
-
     def resolve_moves(self):
 
         if self.shutdown:
@@ -1026,107 +934,6 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -85
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 32
         self.rows_in_turntable_to_count_as_face_turn = 4
-
-    def run_actions(self, actions):
-        """
-        action will be a series of moves such as
-        D'  B2  Rw' Uw  R2  Fw  D   Rw2 B   R2  Uw  D2  Rw2 U2  Fw2 U2  L   F
-        R   Uw2 B'  R   Uw2 L'  D   B   L2  U   B2  D   B2  F'  U'  R   B2  R2
-        F2  R'  B2  F2  D2  L'  U2  z'
-
-        https://www.randelshofer.ch/cubetwister/doc/notations/wca_4x4.html
-        - the first letter is the face name
-        - the w means turn both layers of that face
-        - 2 means two quarter turns (rotate 180)
-        - ' means rotate counter clockwise
-        - ignore the x, y, z at the end, this is just rotating the entire cube to get the F side back to the front
-        """
-
-        log.info('Moves: %s' % ' '.join(actions))
-        total_actions = len(actions)
-
-        for (index, action) in enumerate(actions):
-            log.info("Move %d/%d: %s" % (index, total_actions, action))
-
-            if self.shutdown:
-                break
-
-            if action.startswith('x') or action.startswith('y') or action.startswith('z'):
-                continue
-
-            if action.endswith("'") or action.endswith("’"):
-                clockwise = False
-            else:
-                clockwise = True
-
-            if '2' in action:
-                quarter_turns = 2
-            else:
-                quarter_turns = 1
-
-            target_face = action[0]
-            direction = None
-
-            if 'w' in action:
-                rows = 2
-            else:
-                rows = 1
-
-            if self.facing_up == 'U':
-                if target_face == 'U':
-                    self.elevate(rows)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'L':
-                if target_face == 'L':
-                    self.elevate(rows)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'F':
-                if target_face == 'F':
-                    self.elevate(rows)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'R':
-                if target_face == 'R':
-                    self.elevate(rows)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'B':
-                if target_face == 'B':
-                    self.elevate(rows)
-                else:
-                    direction = self.get_direction(target_face)
-
-            elif self.facing_up == 'D':
-                if target_face == 'D':
-                    self.elevate(rows)
-                else:
-                    direction = self.get_direction(target_face)
-
-            else:
-                raise Exception("Invalid face %s" % self.facing_up)
-
-            if direction:
-                if direction == 'north':
-                    self.move_north_to_top(rows)
-                elif direction == 'west':
-                    self.move_west_to_top(rows)
-                elif direction == 'south':
-                    self.move_south_to_top(rows)
-                elif direction == 'east':
-                    self.move_east_to_top(rows)
-                elif direction == 'down':
-                    self.move_down_to_top(rows)
-                else:
-                    raise Exception("Unsupported direction %s" % direction)
-
-            self.rotate(clockwise, quarter_turns)
-            log.info("\n\n\n\n")
 
     def resolve_moves(self):
 
