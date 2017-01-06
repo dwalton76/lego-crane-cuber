@@ -37,7 +37,8 @@ FLIPPER_SPEED = 300
 # negative moves counter clockwise (viewed from above)
 # positive moves clockwise (viewed from above)
 TURNTABLE_TURN_DEGREES = 210
-TURNTABLE_SPEED = 400
+TURNTABLE_SPEED = 1050
+TURNTABLE_FREE_SPEED = 600
 
 TURN_FREE_TOUCH_DEGREES = 40
 TURN_FREE_SQUARE_TT_DEGREES = -40
@@ -47,7 +48,7 @@ TURN_FREE_SQUARE_TT_DEGREES = -40
 ELEVATOR_SPEED_UP_FAST = 1050
 ELEVATOR_SPEED_UP_SLOW = 800
 ELEVATOR_SPEED_DOWN_FAST = 1050
-ELEVATOR_SPEED_DOWN_SLOW = 200
+ELEVATOR_SPEED_DOWN_SLOW = 800
 
 # References
 # ==========
@@ -156,10 +157,17 @@ class CraneCuber3x3x3(object):
             sleep(0.01)
 
     def _rotate(self, final_pos):
+
+        if self.rows_in_turntable == self.rows_and_cols:
+            speed = TURNTABLE_FREE_SPEED
+        else:
+            speed = TURNTABLE_SPEED
+
         self.turntable.run_to_abs_pos(position_sp=final_pos,
-                                      speed_sp=TURNTABLE_SPEED,
+                                      speed_sp=speed,
                                       stop_action='hold',
-                                      ramp_up_sp=0)
+                                      ramp_up_sp=0,
+                                      ramp_down_sp=100)
         self.turntable.wait_while('running')
 
         # uncomment this if you want to test with 100% accurate rotate position
@@ -267,16 +275,16 @@ class CraneCuber3x3x3(object):
             return
 
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
-                                    speed_sp=int(FLIPPER_SPEED/2),
-                                    ramp_up_sp=100,
-                                    ramp_down_sp=100,
+                                    speed_sp=FLIPPER_SPEED,
+                                    ramp_up_sp=0,
+                                    ramp_down_sp=50,
                                     stop_action='hold')
         self.flipper.wait_while('running', timeout=1000)
 
         self.flipper.run_to_abs_pos(position_sp=0,
-                                    speed_sp=int(FLIPPER_SPEED/2),
-                                    ramp_up_sp=100,
-                                    ramp_down_sp=100,
+                                    speed_sp=FLIPPER_SPEED,
+                                    ramp_up_sp=0,
+                                    ramp_down_sp=50,
                                     stop_action='hold')
         self.flipper.wait_while('running', timeout=1000)
 
@@ -306,8 +314,8 @@ class CraneCuber3x3x3(object):
         start = datetime.datetime.now()
         self.flipper.run_to_abs_pos(position_sp=final_pos,
                                     speed_sp=speed,
-                                    ramp_up_sp=100,
-                                    ramp_down_sp=100,
+                                    ramp_up_sp=0,
+                                    ramp_down_sp=50,
                                     stop_action='hold')
         self.flipper.wait_while('running', timeout=1000)
         self.flipper_at_init = not self.flipper_at_init
@@ -418,20 +426,10 @@ class CraneCuber3x3x3(object):
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=ELEVATOR_SPEED_DOWN_SLOW)
             else:
-                # If we are dropping the elevator all the way to the bottom let
-                # it drop very quickly down to 50 degrees and then lower it the
-                # last 50 at a much lower speed ramp it down some so it has time
-                # to stop
-                self.elevator.run_to_abs_pos(position_sp=100,
-                                             speed_sp=ELEVATOR_SPEED_DOWN_FAST,
-                                             ramp_down_sp=100,
-                                             stop_action='hold')
-                self.elevator.wait_while('running')
-
                 self.elevator.run_to_abs_pos(position_sp=0,
-                                             speed_sp=ELEVATOR_SPEED_DOWN_SLOW,
+                                             speed_sp=ELEVATOR_SPEED_DOWN_FAST,
+                                             ramp_down_sp=50,
                                              stop_action='hold')
-
         # going up
         else:
             if self.rows_in_turntable:
@@ -441,7 +439,7 @@ class CraneCuber3x3x3(object):
             else:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=ELEVATOR_SPEED_UP_FAST,
-                                             ramp_down_sp=100,
+                                             ramp_down_sp=50,
                                              stop_action='hold')
 
         self.elevator.wait_while('running')
@@ -770,9 +768,9 @@ class CraneCuber3x3x3(object):
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
-        log.info("SOLVED!! %ds in elevate, %ds in flip, %ds in rotate, %ds in run_actions, avg %dms per move" %
+        log.info("SOLVED!! %ds in elevate, %ds in flip, %ds in rotate, %ds in run_actions, %d moves, avg %dms per move" %
             (int(self.time_elevate/1000), int(self.time_flip/1000), int(self.time_rotate/1000),
-             int(delta_ms/1000), int(delta_ms/moves)))
+             int(delta_ms/1000), moves, int(delta_ms/moves)))
 
     def resolve_moves(self):
 
