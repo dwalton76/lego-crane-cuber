@@ -54,12 +54,15 @@ def sort_by_row_col(candidates):
             top_row_left_right.append((cX, cY))
         top_row_left_right = sorted(top_row_left_right)
 
+
         log.info("row %d: %s" % (row_index, pformat(top_row_left_right)))
         candidates_to_remove = []
-        for (index, area, currentContour, approx, cX, cY) in candidates:
-            if (cX, cY) in top_row_left_right:
-                result.append((index, area, currentContour, approx, cX, cY))
-                candidates_to_remove.append((index, area, currentContour, approx, cX, cY))
+        for (target_cX, target_cY) in top_row_left_right:
+            for (index, area, currentContour, approx, cX, cY) in candidates:
+                if cX == target_cX and cY == target_cY:
+                    result.append((index, area, currentContour, approx, cX, cY))
+                    candidates_to_remove.append((index, area, currentContour, approx, cX, cY))
+                    break
 
         for x in candidates_to_remove:
             candidates.remove(x)
@@ -85,25 +88,25 @@ def get_rubiks_squares(filename):
     # in the image
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    if debug:
-        cv2.imshow("gray", gray)
-        cv2.waitKey(0)
+    #if debug:
+    #    cv2.imshow("gray", gray)
+    #    cv2.waitKey(0)
 
 
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    if debug:
-        cv2.imshow("blurred", blurred)
-        cv2.waitKey(0)
+    #if debug:
+    #    cv2.imshow("blurred", blurred)
+    #    cv2.waitKey(0)
 
 
     # Threshold settings from here:
     # http://opencvpython.blogspot.com/2012/06/sudoku-solver-part-2.html
     thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 11, 2)
 
-    if debug:
-        cv2.imshow("thresh", thresh)
-        cv2.waitKey(0)
+    #if debug:
+    #    cv2.imshow("thresh", thresh)
+    #    cv2.waitKey(0)
 
 
     # Use a very high h value so that we really blur the image to remove
