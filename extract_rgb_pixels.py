@@ -232,7 +232,8 @@ def extract_rgb_pixels():
         # data will be a list of (R, G, B) tuples, one entry for each square on a side
         data = get_rubiks_squares(filename)
 
-        squares_per_side = int(math.sqrt(len(data)))
+        squares_per_side = len(data)
+        size = int(math.sqrt(squares_per_side))
         init_square_index = (side_index * squares_per_side) + 1
 
         square_indexes = []
