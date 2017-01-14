@@ -1,66 +1,188 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2
 
-from PIL import Image
+from copy import deepcopy
 from pprint import pformat
 import argparse
+import cv2
 import logging
 import json
+import logging
 import math
+import numpy as np
 import os
 import sys
 
 
-def print_calibrate_howto():
-    print("""
-We need to know which pixels are the center pixels for each square.
-This data will be stored in camera.json which should look like the following.
+def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
+    row_neighbors = 0
+    col_neighbors = 0
 
-robot@ev3dev[lego-crane-cuber]# cat camera.json
-{"3x3x3" : [{"x" : 104, "y" : 63 },
-            {"x" : 157, "y" : 63 },
-            {"x" : 215, "y" : 63 },
-            {"x" : 100, "y" : 117 },
-            {"x" : 157, "y" : 117 },
-            {"x" : 212, "y" : 117 },
-            {"x" : 101, "y" : 174 },
-            {"x" : 157, "y" : 174 },
-            {"x" : 216, "y" : 174 }]
-}
-robot@ev3dev[lego-crane-cuber]#
+    width_wiggle = int(img_width * 0.05)
+    height_wiggle = int(img_height * 0.09)
 
-So how to find the (x,y) for each square? On your EV3 run:
-$ fswebcam --device /dev/video0 --no-timestamp --no-title --no-subtitle --no-banner --no-info -s brightness=120% -r 320x240 --png 1 /tmp/rubiks_scan.png
+    (_, _, _, _, target_cX, target_cY) = target_tuple
 
-scp this file to your laptop and view it via "edisplay rubiks_scan.png".
-edisplay will display the (x, y) coordinates as you move the mouse in the image.
-Use this to find the (x, y) coordinate for each square and record it in camera.json
-""")
+    for x in candidates:
+        if x == target_tuple:
+            continue
+        (index, area, currentContour, approx, cX, cY) = x
+
+        if abs(cX - target_cX) <= width_wiggle:
+            col_neighbors += 1
+
+        if abs(cY - target_cY) <= height_wiggle:
+            row_neighbors += 1
+
+    return (row_neighbors, col_neighbors)
 
 
-def get_center_pixel_coordinates(key):
-    center_pixels = []
-    calibrate_filename = '/home/robot/lego-crane-cuber/camera.json'
+def sort_by_row_col(candidates):
+    # dwalton
+    result = []
+    num_squares = len(candidates)
+    squares_per_row = int(math.sqrt(num_squares))
 
-    if not os.path.exists(calibrate_filename):
-        print("ERROR: No camera.json file")
-        print_calibrate_howto()
-        sys.exit(1)
+    for row_index in xrange(squares_per_row):
 
-    with open(calibrate_filename, 'r') as fh:
-        data = json.load(fh)
+        # We want the squares_per_row that are closest to the top
+        tmp = []
+        for (index, area, currentContour, approx, cX, cY) in candidates:
+            tmp.append((cY, cX))
+        top_row = sorted(tmp)[:squares_per_row]
 
-        if key in data:
-            squares = data[key]
+        # Now that we have those, sort them from left to right
+        top_row_left_right = []
+        for (cY, cX) in top_row:
+            top_row_left_right.append((cX, cY))
+        top_row_left_right = sorted(top_row_left_right)
 
-            for square in squares:
-                center_pixels.append((square.get('x'), square.get('y')))
+        log.info("row %d: %s" % (row_index, pformat(top_row_left_right)))
+        candidates_to_remove = []
+        for (index, area, currentContour, approx, cX, cY) in candidates:
+            if (cX, cY) in top_row_left_right:
+                result.append((index, area, currentContour, approx, cX, cY))
+                candidates_to_remove.append((index, area, currentContour, approx, cX, cY))
+
+        for x in candidates_to_remove:
+            candidates.remove(x)
+
+    return result
+
+def is_square(integer):
+    root = math.sqrt(integer)
+
+    if int(root + 0.5) ** 2 == integer: 
+        return True
+    else:
+        return False
+
+
+def get_rubiks_squares(filename):
+    image = cv2.imread(filename)
+    (img_height, img_width) = image.shape[:2]
+
+    # convert the image to grayscale
+    # in the image
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #cv2.imshow("gray", gray)
+    #cv2.waitKey(0)
+
+    blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+    #cv2.imshow("blurred", blurred)
+    #cv2.waitKey(0)
+
+    # Threshold settings from here:
+    # http://opencvpython.blogspot.com/2012/06/sudoku-solver-part-2.html
+    thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 11, 2)
+    #cv2.imshow("thresh", thresh)
+    #cv2.waitKey(0)
+
+    # Use a very high h value so that we really blur the image to remove
+    # all spots that might be in the rubiks squares...we want the rubiks
+    # squares to be solid black
+    denoised = cv2.fastNlMeansDenoising(thresh, h=110)
+    #cv2.imshow("denoised", denoised)
+    #cv2.waitKey(0)
+
+    # Now invert the image so that the rubiks squares are white but most
+    # of the rest of the image is black
+    thresh2 = cv2.threshold(denoised, 10, 255, cv2.THRESH_BINARY_INV)[1]
+    #cv2.imshow("inverted", thresh2)
+    #cv2.waitKey(0)
+
+    (contours, hierarchy) = cv2.findContours(thresh2.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    candidates = []
+    hierarchy = hierarchy[0] # get the actual inner list of hierarchy descriptions
+
+    # http://docs.opencv.org/trunk/d9/d8b/tutorial_py_contours_hierarchy.html
+    # http://stackoverflow.com/questions/11782147/python-opencv-contour-tree-hierarchy
+    #
+    # For each contour, find the bounding rectangle and draw it
+    index = 0
+    for component in zip(contours, hierarchy):
+        currentContour = component[0]
+        currentHierarchy = component[1]
+
+        # currentHierarchy[2] of -1 means this contour has no children so we know
+        # this is the "inside" contour for a square...some squares get two contours
+        # due to the black border around the edge of the square
+        if currentHierarchy[2] == -1:
+
+            # approximate the contour
+            peri = cv2.arcLength(currentContour, True)
+            approx = cv2.approxPolyDP(currentContour, 0.1 * peri, True)
+            area = cv2.contourArea(currentContour)
+
+            if area > 100 and len(approx) >= 3:
+
+                # compute the center of the contour
+                M = cv2.moments(currentContour)
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+
+                log.info("area %d, corners %d" % (area, len(approx)))
+                candidates.append((index, area, currentContour, approx, cX, cY))
+        index += 1
+
+    while True:
+        candidates_to_remove = []
+
+        for x in candidates:
+            (row_neighbors, col_neighbors) = get_candidate_neighbors(x, candidates, img_width, img_height)
+            if row_neighbors <= 1 or col_neighbors <= 1:
+                candidates_to_remove.append(x)
+
+        if candidates_to_remove:
+            for x in candidates_to_remove:
+                candidates.remove(x)
+                # log.info("removed candidate")
         else:
-            print("ERROR: Cube %s is not in %s" % (key, calibrate_filename))
-            print_calibrate_howto()
-            sys.exit(1)
+            break
 
-    log.info("center_pixels\n%s" % pformat(center_pixels))
-    return center_pixels
+    # Verify we found the right number of squares
+    num_squares = len(candidates)
+    assert is_square(num_squares), "Found %d squares which cannot be right" % num_squares
+
+    candidates = sort_by_row_col(deepcopy(candidates))
+    data = []
+    to_draw = []
+    for (index, _, contour, _, cX, cY) in candidates:
+        (blue, green, red) = map(int, image[cY, cX])
+        data.append((red, green, blue))
+        to_draw.append(contour)
+
+        # uncomment to fill in the contour with the color of the center pixel
+        # cv2.drawContours(image, contours, index, (blue, green, red), -1)
+
+    # uncomment to debug
+    # draw a blue line to show the contours we IDed as the squares of the cube
+    # cv2.drawContours(image, to_draw, -1, (255, 0, 0), 2)
+    # cv2.imshow("Rubiks Cube Squares", image)
+    # cv2.waitKey(0)
+    # cv2.imwrite('foo.png', image)
+
+    return data
 
 
 def rotate_2d_array(original):
@@ -84,35 +206,9 @@ def compress_2d_array(original):
     return result
 
 
-def extract_rgb_pixels(size):
-    dimensions = "%dx%dx%d" % (size, size, size)
+def extract_rgb_pixels():
     colors = {}
-    center_pixels = get_center_pixel_coordinates(dimensions)
-    squares_per_side = int(math.pow(size, 2))
-
-    # print the cube layout to make the debugs easier to read
-    if size == 2:
-        log.info("""
-               01 02
-               03 04
-        05 06  09 10  13 14  17 18
-        07 08  11 12  15 16  19 20
-               21 22
-               23 24
-        """)
-
-    elif size == 3:
-        log.info("""
-           01 02 03
-           04 05 06
-           07 08 09
- 10 11 12  19 20 21  28 29 30  37 38 39
- 13 14 15  22 23 24  31 32 33  40 41 42
- 16 17 18  25 26 27  34 35 36  43 44 45
-           46 47 48
-           49 50 51
-           52 53 54
-        """)
+    squares_per_side = None
 
     for (side_index, side) in enumerate(('U', 'L', 'F', 'R', 'B', 'D')):
         '''
@@ -127,6 +223,16 @@ def extract_rgb_pixels(size):
 
         calculate the index of the first square for each side
         '''
+        filename = "/tmp/rubiks-side-%s.png" % side
+
+        if not os.path.exists(filename):
+            print "ERROR: %s does not exists" % filename
+            sys.exit(1)
+
+        # data will be a list of (R, G, B) tuples, one entry for each square on a side
+        data = get_rubiks_squares(filename)
+
+        squares_per_side = int(math.sqrt(len(data)))
         init_square_index = (side_index * squares_per_side) + 1
 
         square_indexes = []
@@ -148,22 +254,13 @@ def extract_rgb_pixels(size):
             my_indexes = square_indexes
 
         log.info("%s my_indexes %s" % (side, pformat(my_indexes)))
-
-        filename = "/tmp/rubiks-side-%s.png" % side
-        im = Image.open(filename)
-        pix = im.load()
-
         my_indexes = compress_2d_array(my_indexes)
         log.info("%s my_indexes (final) %s" % (side, pformat(my_indexes)))
 
-        # for index in my_indexes:
         for index in range(squares_per_side):
             square_index = my_indexes[index]
-
-            (x, y) = center_pixels[index]
-            (red, green, blue) = pix[x, y]
-            log.info("square %d, pixels (%s, %s), RGB (%d, %d, %d)" %
-                (square_index, x, y, red, green, blue))
+            (red, green, blue) = data[index]
+            log.info("square %d, RGB (%d, %d, %d)" % (square_index, red, green, blue))
 
             # colors is a dict where the square number (as an int) will be
             # the key and a RGB tuple the value
@@ -182,8 +279,4 @@ if __name__ == '__main__':
     logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
-    parser = argparse.ArgumentParser(description="Extract RGB values from rubiks cube images")
-    parser.add_argument('size', type=int, help='"3" for 3x3x3, "2" for 2x2x2, etc')
-    args = parser.parse_args()
-
-    print(json.dumps(extract_rgb_pixels(args.size)))
+    print(json.dumps(extract_rgb_pixels()))
