@@ -12,7 +12,6 @@ import numpy as np
 import os
 import sys
 
-
 def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
     row_neighbors = 0
     col_neighbors = 0
@@ -37,7 +36,6 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
 
 
 def sort_by_row_col(candidates):
-    # dwalton
     result = []
     num_squares = len(candidates)
     squares_per_row = int(math.sqrt(num_squares))
@@ -71,44 +69,59 @@ def sort_by_row_col(candidates):
 def is_square(integer):
     root = math.sqrt(integer)
 
-    if int(root + 0.5) ** 2 == integer: 
+    if int(root + 0.5) ** 2 == integer:
         return True
     else:
         return False
 
 
 def get_rubiks_squares(filename):
+    debug = False
+
     image = cv2.imread(filename)
     (img_height, img_width) = image.shape[:2]
 
     # convert the image to grayscale
     # in the image
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    #cv2.imshow("gray", gray)
-    #cv2.waitKey(0)
+
+    if debug:
+        cv2.imshow("gray", gray)
+        cv2.waitKey(0)
+
 
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-    #cv2.imshow("blurred", blurred)
-    #cv2.waitKey(0)
+
+    if debug:
+        cv2.imshow("blurred", blurred)
+        cv2.waitKey(0)
+
 
     # Threshold settings from here:
     # http://opencvpython.blogspot.com/2012/06/sudoku-solver-part-2.html
     thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 11, 2)
-    #cv2.imshow("thresh", thresh)
-    #cv2.waitKey(0)
+
+    if debug:
+        cv2.imshow("thresh", thresh)
+        cv2.waitKey(0)
+
 
     # Use a very high h value so that we really blur the image to remove
     # all spots that might be in the rubiks squares...we want the rubiks
     # squares to be solid black
-    denoised = cv2.fastNlMeansDenoising(thresh, h=110)
-    #cv2.imshow("denoised", denoised)
-    #cv2.waitKey(0)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=120)
+
+    if debug:
+        cv2.imshow("denoised", denoised)
+        cv2.waitKey(0)
 
     # Now invert the image so that the rubiks squares are white but most
     # of the rest of the image is black
     thresh2 = cv2.threshold(denoised, 10, 255, cv2.THRESH_BINARY_INV)[1]
-    #cv2.imshow("inverted", thresh2)
-    #cv2.waitKey(0)
+
+    if debug:
+        cv2.imshow("inverted", thresh2)
+        cv2.waitKey(0)
 
     (contours, hierarchy) = cv2.findContours(thresh2.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -127,7 +140,7 @@ def get_rubiks_squares(filename):
         # currentHierarchy[2] of -1 means this contour has no children so we know
         # this is the "inside" contour for a square...some squares get two contours
         # due to the black border around the edge of the square
-        if currentHierarchy[2] == -1:
+        if True or currentHierarchy[2] == -1:
 
             # approximate the contour
             peri = cv2.arcLength(currentContour, True)
@@ -138,11 +151,12 @@ def get_rubiks_squares(filename):
 
                 # compute the center of the contour
                 M = cv2.moments(currentContour)
-                cX = int(M["m10"] / M["m00"])
-                cY = int(M["m01"] / M["m00"])
+                if M["m00"]:
+                    cX = int(M["m10"] / M["m00"])
+                    cY = int(M["m01"] / M["m00"])
 
-                log.info("area %d, corners %d" % (area, len(approx)))
-                candidates.append((index, area, currentContour, approx, cX, cY))
+                    log.info("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
+                    candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
     while True:
@@ -160,27 +174,35 @@ def get_rubiks_squares(filename):
         else:
             break
 
-    # Verify we found the right number of squares
     num_squares = len(candidates)
-    assert is_square(num_squares), "Found %d squares which cannot be right" % num_squares
-
     candidates = sort_by_row_col(deepcopy(candidates))
     data = []
     to_draw = []
-    for (index, _, contour, _, cX, cY) in candidates:
+    to_draw_approx = []
+    for (index, area, contour, approx, cX, cY) in candidates:
         (blue, green, red) = map(int, image[cY, cX])
         data.append((red, green, blue))
         to_draw.append(contour)
+        to_draw_approx.append(approx)
 
         # uncomment to fill in the contour with the color of the center pixel
         # cv2.drawContours(image, contours, index, (blue, green, red), -1)
 
-    # uncomment to debug
-    # draw a blue line to show the contours we IDed as the squares of the cube
-    # cv2.drawContours(image, to_draw, -1, (255, 0, 0), 2)
-    # cv2.imshow("Rubiks Cube Squares", image)
-    # cv2.waitKey(0)
-    # cv2.imwrite('foo.png', image)
+    if debug:
+        # draw a blue line to show the contours we IDed as the squares of the cube
+        cv2.drawContours(image, to_draw, -1, (255, 0, 0), 2)
+
+        # draw a green line to show the approx for each contour
+        # cv2.drawContours(image, to_draw_approx, -1, (0, 255, 0), 2)
+
+        cv2.imshow("Rubiks Cube Squares", image)
+        cv2.waitKey(0)
+        # cv2.imwrite('foo.png', image)
+
+    # Verify we found the right number of squares
+    num_squares = len(candidates)
+    if not is_square(num_squares):
+        assert False, "Found %d squares which cannot be right" % num_squares
 
     return data
 
@@ -206,7 +228,7 @@ def compress_2d_array(original):
     return result
 
 
-def extract_rgb_pixels():
+def extract_rgb_pixels(target_side):
     colors = {}
     squares_per_side = None
 
@@ -223,6 +245,11 @@ def extract_rgb_pixels():
 
         calculate the index of the first square for each side
         '''
+
+        # target_side is only True when we are debugging an image
+        if target_side is not None and side != target_side:
+            continue
+
         filename = "/tmp/rubiks-side-%s.png" % side
 
         if not os.path.exists(filename):
@@ -280,4 +307,9 @@ if __name__ == '__main__':
     logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
-    print(json.dumps(extract_rgb_pixels()))
+    if len(sys.argv) > 1:
+        target_side = sys.argv[1]
+    else:
+        target_side = None
+
+    print(json.dumps(extract_rgb_pixels(target_side)))
