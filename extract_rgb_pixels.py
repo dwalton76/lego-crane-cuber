@@ -144,15 +144,26 @@ def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
         candidates_to_remove = []
 
         for x in candidates:
+            (index, area, currentContour, approx, cX, cY) = x
+
             (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
                 get_candidate_neighbors(x, candidates, img_width, img_height)
 
-            if (row_neighbors < min_neighbors or
-                col_neighbors < min_neighbors or
-                not row_square_neighbors or
-                not col_square_neighbors):
-
+            if row_neighbors < min_neighbors:
                 candidates_to_remove.append(x)
+                log.info("remove_lonesome_contours() (%d, %d) removed due to row_neighbors %d < %d" % (cX, cY, row_neighbors, min_neighbors))
+
+            elif col_neighbors < min_neighbors:
+                candidates_to_remove.append(x)
+                log.info("remove_lonesome_contours() (%d, %d) removed due to col_neighbors %d < %d" % (cX, cY, col_neighbors, min_neighbors))
+
+            elif not row_square_neighbors:
+                candidates_to_remove.append(x)
+                log.info("remove_lonesome_contours() (%d, %d) removed due to no row_square_neighbors" % (cX, cY))
+
+            elif not col_square_neighbors:
+                candidates_to_remove.append(x)
+                log.info("remove_lonesome_contours() (%d, %d) removed due to no col_square_neighbors" % (cX, cY))
 
         if candidates_to_remove:
             for x in candidates_to_remove:
@@ -224,7 +235,7 @@ def get_rubiks_squares(filename):
     # Use a very high h value so that we really blur the image to remove
     # all spots that might be in the rubiks squares...we want the rubiks
     # squares to be solid black
-    denoised = cv2.fastNlMeansDenoising(thresh, h=90)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=100)
 
     if debug:
         cv2.imshow("denoised", denoised)
@@ -486,4 +497,4 @@ if __name__ == '__main__':
     else:
         target_side = None
 
-    print(json.dumps(extract_rgb_pixels(target_side)))
+    print(json.dumps(extract_rgb_pixels(target_side), sort_keys=True))
