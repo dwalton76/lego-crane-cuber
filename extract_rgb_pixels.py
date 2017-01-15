@@ -49,7 +49,7 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
     col_square_neighbors = 0
 
     # These are percentages of the image width and height
-    ROW_THRESHOLD = 0.02
+    ROW_THRESHOLD = 0.03
     COL_THRESHOLD = 0.04
 
     width_wiggle = int(img_width * COL_THRESHOLD)
