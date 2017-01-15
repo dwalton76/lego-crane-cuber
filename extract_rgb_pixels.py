@@ -310,7 +310,7 @@ def get_rubiks_squares(filename):
 
     size = get_cube_size(deepcopy(candidates), img_width, img_height)
 
-    remove_lonesome_contours(candidates, img_width, img_height, size-1)
+    remove_lonesome_contours(candidates, img_width, img_height, int(size/2))
 
     if debug:
         to_draw = []
