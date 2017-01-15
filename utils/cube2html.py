@@ -148,8 +148,8 @@ if squares == 96:
             print("<div class='side' id='bottom'>")
 
         (red, green, blue) = cube[str(index)]
-        print("<div class='square col%d' style='background-color: #%s%s%s;'><span>%s</span></div>" %
-            (col,
+        print("<div class='square col%d' title='(%d, %d, %d)' style='background-color: #%s%s%s;'><span>%s</span></div>" %
+            (col, red, green, blue,
              str(hex(red))[2:].zfill(2),
              str(hex(green))[2:].zfill(2),
              str(hex(blue))[2:].zfill(2),

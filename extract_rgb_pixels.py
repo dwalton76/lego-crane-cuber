@@ -162,6 +162,7 @@ def get_rubiks_squares(filename):
                     candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
+    # Remove contours that are off by themselves
     while True:
         candidates_to_remove = []
 
@@ -182,14 +183,22 @@ def get_rubiks_squares(filename):
     data = []
     to_draw = []
     to_draw_approx = []
+
     for (index, area, contour, approx, cX, cY) in candidates:
-        (blue, green, red) = map(int, image[cY, cX])
-        data.append((red, green, blue))
+        # We used to use the value of the center pixel
+        #(blue, green, red) = map(int, image[cY, cX])
+        #data.append((red, green, blue))
+
+        # Now we use the mean value of the contour
+        mask = np.zeros(gray.shape, np.uint8)
+        cv2.drawContours(mask, [contour], 0, 255, -1)
+        (mean_blue, mean_green, mean_red, _)= map(int, cv2.mean(image, mask = mask))
+        data.append((mean_red, mean_green, mean_blue))
+
+        #log.info("normal BGR (%s, %s, %s), mean BGR (%s, %s, %s)" %\
+        #    (blue, green, red, mean_blue, mean_green, mean_red))
         to_draw.append(contour)
         to_draw_approx.append(approx)
-
-        # uncomment to fill in the contour with the color of the center pixel
-        # cv2.drawContours(image, contours, index, (blue, green, red), -1)
 
     if debug:
         # draw a blue line to show the contours we IDed as the squares of the cube
