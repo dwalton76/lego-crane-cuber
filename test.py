@@ -50,6 +50,8 @@ test_cases = (
     ('3x3x3 random 01',    'test-data/3x3x3-random-01.txt'),
     ('3x3x3 random 02',    'test-data/3x3x3-random-02.txt'),
     ('3x3x3 random 03',    'test-data/3x3x3-random-03.txt'),
+    ('3x3x3 random 04',    'test-data/3x3x3-random-04.txt'),
+    ('3x3x3 random 05',    'test-data/3x3x3-random-05.txt'),
 )
 
 results = []
@@ -60,7 +62,12 @@ for (desc, filename) in test_cases:
     log.info("test_dir: %s" % test_dir)
 
     subprocess.call("cp %s/*.png /tmp/" % test_dir, shell=True)
-    output = subprocess.check_output(['./extract_rgb_pixels.py']).decode('ascii').splitlines()[0].strip()
+
+    try:
+        output = subprocess.check_output(['./extract_rgb_pixels.py']).decode('ascii').splitlines()[0].strip()
+    except subprocess.CalledProcessError:
+        print("ERROR: ./extract_rgb_pixels.py barfed on %s" % filename)
+        sys.exit(1)
 
     with open(filename, 'r') as fh:
         expected_output = fh.readlines()[0].strip()

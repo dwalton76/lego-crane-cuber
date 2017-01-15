@@ -52,29 +52,45 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
     ROW_THRESHOLD = 0.02
     COL_THRESHOLD = 0.04
 
-    width_wiggle = int(img_width * ROW_THRESHOLD)
-    height_wiggle = int(img_height * COL_THRESHOLD)
+    width_wiggle = int(img_width * COL_THRESHOLD)
+    height_wiggle = int(img_height * ROW_THRESHOLD)
 
     (_, _, _, _, target_cX, target_cY) = target_tuple
+
+    log.debug("get_candidate_neighbors() for contour (%d, %d), width_wiggle %s, height_wiggle %s" %
+        (target_cX, target_cY, width_wiggle, height_wiggle))
 
     for x in candidates:
         if x == target_tuple:
             continue
         (index, area, currentContour, approx, cX, cY) = x
+        x_delta = abs(cX - target_cX)
+        y_delta = abs(cY - target_cY)
 
-        if abs(cX - target_cX) <= width_wiggle:
+        if x_delta <= width_wiggle:
             col_neighbors += 1
 
             if len(approx) >= 4:
                 col_square_neighbors += 1
+                log.debug("(%d, %d) is a square col neighbor" % (cX, cY))
+            else:
+                log.debug("(%d, %d) is a col neighbor but has %d corners" % (cX, cY, len(approx)))
+        else:
+            log.debug("(%d, %d) x delta %s it outside wiggle room %s" % (cX, cY, x_delta, width_wiggle))
 
-        if abs(cY - target_cY) <= height_wiggle:
+        if y_delta <= height_wiggle:
             row_neighbors += 1
 
             if len(approx) >= 4:
                 row_square_neighbors += 1
+                log.debug("(%d, %d) is a square row neighbor" % (cX, cY))
+            else:
+                log.debug("(%d, %d) is a row neighbor but has %d corners" % (cX, cY, len(approx)))
+        else:
+            log.debug("(%d, %d) y delta %s it outside wiggle room %s" % (cX, cY, y_delta, height_wiggle))
 
-    log.debug("contour (%d, %d) has row %d, row_square %d, col %d, col_square %d neighbors" %
+    # dwalton
+    log.debug("get_candidate_neighbors() for contour (%d, %d) has row %d, row_square %d, col %d, col_square %d neighbors" %
         (target_cX, target_cY, row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors))
 
     return (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors)
@@ -151,19 +167,19 @@ def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
 
             if row_neighbors < min_neighbors:
                 candidates_to_remove.append(x)
-                log.info("remove_lonesome_contours() (%d, %d) removed due to row_neighbors %d < %d" % (cX, cY, row_neighbors, min_neighbors))
+                log.warning("remove_lonesome_contours() (%d, %d) removed due to row_neighbors %d < %d" % (cX, cY, row_neighbors, min_neighbors))
 
             elif col_neighbors < min_neighbors:
                 candidates_to_remove.append(x)
-                log.info("remove_lonesome_contours() (%d, %d) removed due to col_neighbors %d < %d" % (cX, cY, col_neighbors, min_neighbors))
+                log.warning("remove_lonesome_contours() (%d, %d) removed due to col_neighbors %d < %d" % (cX, cY, col_neighbors, min_neighbors))
 
             elif not row_square_neighbors:
                 candidates_to_remove.append(x)
-                log.info("remove_lonesome_contours() (%d, %d) removed due to no row_square_neighbors" % (cX, cY))
+                log.warning("remove_lonesome_contours() (%d, %d) removed due to no row_square_neighbors" % (cX, cY))
 
             elif not col_square_neighbors:
                 candidates_to_remove.append(x)
-                log.info("remove_lonesome_contours() (%d, %d) removed due to no col_square_neighbors" % (cX, cY))
+                log.warning("remove_lonesome_contours() (%d, %d) removed due to no col_square_neighbors" % (cX, cY))
 
         if candidates_to_remove:
             for x in candidates_to_remove:
@@ -225,7 +241,7 @@ def get_rubiks_squares(filename):
 
     # Threshold settings from here:
     # http://opencvpython.blogspot.com/2012/06/sudoku-solver-part-2.html
-    thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 11, 2)
+    thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 15, 2)
 
     #if debug:
     #    cv2.imshow("thresh", thresh)
@@ -235,7 +251,7 @@ def get_rubiks_squares(filename):
     # Use a very high h value so that we really blur the image to remove
     # all spots that might be in the rubiks squares...we want the rubiks
     # squares to be solid black
-    denoised = cv2.fastNlMeansDenoising(thresh, h=100)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=90)
 
     if debug:
         cv2.imshow("denoised", denoised)
@@ -290,7 +306,7 @@ def get_rubiks_squares(filename):
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
 
-                log.debug("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
+                log.info("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
                 candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
