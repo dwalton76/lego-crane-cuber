@@ -3,14 +3,14 @@
 """
 Given the following .png files in /tmp/
 
-dwalton@laptop ~/l/lego-crane-cuber> ls -l /tmp/rubiks-side-*
--rw-r--r-- 1 dwalton dwalton 105127 Jan 15 00:30 /tmp/rubiks-side-B.png
--rw-r--r-- 1 dwalton dwalton 105014 Jan 15 00:30 /tmp/rubiks-side-D.png
--rw-r--r-- 1 dwalton dwalton 103713 Jan 15 00:30 /tmp/rubiks-side-F.png
--rw-r--r-- 1 dwalton dwalton  99467 Jan 15 00:30 /tmp/rubiks-side-L.png
--rw-r--r-- 1 dwalton dwalton  98052 Jan 15 00:30 /tmp/rubiks-side-R.png
--rw-r--r-- 1 dwalton dwalton  97292 Jan 15 00:30 /tmp/rubiks-side-U.png
-dwalton@laptop ~/l/lego-crane-cuber>
+jdoe@laptop ~/l/lego-crane-cuber> ls -l /tmp/rubiks-side-*
+-rw-r--r-- 1 jdoe jdoe 105127 Jan 15 00:30 /tmp/rubiks-side-B.png
+-rw-r--r-- 1 jdoe jdoe 105014 Jan 15 00:30 /tmp/rubiks-side-D.png
+-rw-r--r-- 1 jdoe jdoe 103713 Jan 15 00:30 /tmp/rubiks-side-F.png
+-rw-r--r-- 1 jdoe jdoe  99467 Jan 15 00:30 /tmp/rubiks-side-L.png
+-rw-r--r-- 1 jdoe jdoe  98052 Jan 15 00:30 /tmp/rubiks-side-R.png
+-rw-r--r-- 1 jdoe jdoe  97292 Jan 15 00:30 /tmp/rubiks-side-U.png
+jdoe@laptop ~/l/lego-crane-cuber>
 
 For each png
 - find all of the rubiks squares
@@ -89,7 +89,6 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         else:
             log.debug("(%d, %d) y delta %s it outside wiggle room %s" % (cX, cY, y_delta, height_wiggle))
 
-    # dwalton
     log.debug("get_candidate_neighbors() for contour (%d, %d) has row %d, row_square %d, col %d, col_square %d neighbors" %
         (target_cX, target_cY, row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors))
 
@@ -296,6 +295,10 @@ def get_rubiks_squares(filename):
         peri = cv2.arcLength(currentContour, True)
         approx = cv2.approxPolyDP(currentContour, 0.1 * peri, True)
         area = cv2.contourArea(currentContour)
+
+        # dwalton
+        # if currentHierarchy[2]  != -1:
+        #     continue
 
         if area > 100:
 
