@@ -224,7 +224,7 @@ def get_rubiks_squares(filename):
     # Use a very high h value so that we really blur the image to remove
     # all spots that might be in the rubiks squares...we want the rubiks
     # squares to be solid black
-    denoised = cv2.fastNlMeansDenoising(thresh, h=110)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=90)
 
     if debug:
         cv2.imshow("denoised", denoised)
