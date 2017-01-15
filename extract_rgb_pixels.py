@@ -49,8 +49,8 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
     col_square_neighbors = 0
 
     # These are percentages of the image width and height
-    ROW_THRESHOLD = 0.05
-    COL_THRESHOLD = 0.09
+    ROW_THRESHOLD = 0.02
+    COL_THRESHOLD = 0.04
 
     width_wiggle = int(img_width * ROW_THRESHOLD)
     height_wiggle = int(img_height * COL_THRESHOLD)
@@ -283,9 +283,43 @@ def get_rubiks_squares(filename):
                 candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
+    if debug:
+        to_draw = []
+        for (index, area, contour, approx, cX, cY) in candidates:
+            to_draw.append(contour)
+        tmp_image = image.copy()
+        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
+        cv2.imshow("pre lonesome removal #1", tmp_image)
+        cv2.waitKey(0)
+
     remove_lonesome_contours(candidates, img_width, img_height, 1)
+
+    if debug:
+        to_draw = []
+        to_draw_approx = []
+        for (index, area, contour, approx, cX, cY) in candidates:
+            to_draw.append(contour)
+            to_draw_approx.append(approx)
+
+        tmp_image = image.copy()
+        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
+        cv2.drawContours(tmp_image, to_draw_approx, -1, (0, 255, 0), 2)
+
+        cv2.imshow("post lonesome removal #1", tmp_image)
+        cv2.waitKey(0)
+
     size = get_cube_size(deepcopy(candidates), img_width, img_height)
-    remove_lonesome_contours(candidates, img_width, img_height, size-1)
+
+    remove_lonesome_contours(candidates, img_width, img_height, int(size/2))
+
+    if debug:
+        to_draw = []
+        for (index, area, contour, approx, cX, cY) in candidates:
+            to_draw.append(contour)
+        tmp_image = image.copy()
+        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
+        cv2.imshow("post lonesome removal #2", tmp_image)
+        cv2.waitKey(0)
 
     num_squares = len(candidates)
     candidates = sort_by_row_col(deepcopy(candidates))
