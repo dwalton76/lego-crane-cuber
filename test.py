@@ -53,6 +53,7 @@ test_cases = (
     ('3x3x3 random 04',    'test-data/3x3x3-random-04.txt'),
     ('3x3x3 random 05',    'test-data/3x3x3-random-05.txt'),
     ('3x3x3 random 06',    'test-data/3x3x3-random-06.txt'),
+    ('3x3x3 random 07',    'test-data/3x3x3-random-07.txt'),
 )
 
 results = []

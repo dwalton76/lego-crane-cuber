@@ -296,9 +296,15 @@ def get_rubiks_squares(filename):
         approx = cv2.approxPolyDP(currentContour, 0.1 * peri, True)
         area = cv2.contourArea(currentContour)
 
-        # dwalton
-        # if currentHierarchy[2]  != -1:
-        #     continue
+        if currentHierarchy[3] == -1:
+            has_parent = False
+        else:
+            has_parent = True
+
+        # Sometimes dents in the sticker on a square can cause us to find a contour
+        # within the contour for the square.  Ignore any contour that has a parent contour.
+        if has_parent:
+            continue
 
         if area > 100:
 
