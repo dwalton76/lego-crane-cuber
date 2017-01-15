@@ -1,5 +1,23 @@
 #!/usr/bin/env python2
 
+"""
+Given the following .png files in /tmp/
+
+dwalton@laptop ~/l/lego-crane-cuber> ls -l /tmp/rubiks-side-*
+-rw-r--r-- 1 dwalton dwalton 105127 Jan 15 00:30 /tmp/rubiks-side-B.png
+-rw-r--r-- 1 dwalton dwalton 105014 Jan 15 00:30 /tmp/rubiks-side-D.png
+-rw-r--r-- 1 dwalton dwalton 103713 Jan 15 00:30 /tmp/rubiks-side-F.png
+-rw-r--r-- 1 dwalton dwalton  99467 Jan 15 00:30 /tmp/rubiks-side-L.png
+-rw-r--r-- 1 dwalton dwalton  98052 Jan 15 00:30 /tmp/rubiks-side-R.png
+-rw-r--r-- 1 dwalton dwalton  97292 Jan 15 00:30 /tmp/rubiks-side-U.png
+dwalton@laptop ~/l/lego-crane-cuber>
+
+For each png
+- find all of the rubiks squares
+- json dump a dictionary that contains the RGB values for each square
+
+"""
+
 from copy import deepcopy
 from pprint import pformat
 import argparse
@@ -12,16 +30,30 @@ import numpy as np
 import os
 import sys
 
+# If you need to troubleshoot a particular image (say side F) run "./extract_rgb_pixels.py F"
+# debug will be set to True in this scenario
 debug = False
 
+
 def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
+    """
+    target_tuple is a contour, return stats on how many other contours are in
+    the same 'row' or 'col' as target_tuple
+
+    ROW_THRESHOLD determines how far up/down we look for other contours
+    COL_THRESHOLD determines how far left/right we look for other contours
+    """
     row_neighbors = 0
     row_square_neighbors = 0
     col_neighbors = 0
     col_square_neighbors = 0
 
-    width_wiggle = int(img_width * 0.05)
-    height_wiggle = int(img_height * 0.09)
+    # These are percentages of the image width and height
+    ROW_THRESHOLD = 0.05
+    COL_THRESHOLD = 0.09
+
+    width_wiggle = int(img_width * ROW_THRESHOLD)
+    height_wiggle = int(img_height * COL_THRESHOLD)
 
     (_, _, _, _, target_cX, target_cY) = target_tuple
 
@@ -42,10 +74,17 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
             if len(approx) >= 4:
                 row_square_neighbors += 1
 
+    log.debug("contour (%d, %d) has row %d, row_square %d, col %d, col_square %d neighbors" %
+        (target_cX, target_cY, row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors))
+
     return (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors)
 
 
 def sort_by_row_col(candidates):
+    """
+    Given a set of candidates sort them starting from the upper left corner
+    and ending at the bottom right corner
+    """
     result = []
     num_squares = len(candidates)
     squares_per_row = int(math.sqrt(num_squares))
@@ -64,8 +103,7 @@ def sort_by_row_col(candidates):
             top_row_left_right.append((cX, cY))
         top_row_left_right = sorted(top_row_left_right)
 
-
-        log.info("row %d: %s" % (row_index, pformat(top_row_left_right)))
+        log.info("sort_by_row_col() row %d: %s" % (row_index, pformat(top_row_left_right)))
         candidates_to_remove = []
         for (target_cX, target_cY) in top_row_left_right:
             for (index, area, currentContour, approx, cX, cY) in candidates:
@@ -79,7 +117,11 @@ def sort_by_row_col(candidates):
 
     return result
 
-def is_square(integer):
+
+def square_root_is_integer(integer):
+    """
+    Return True if integer's square root is an integer
+    """
     root = math.sqrt(integer)
 
     if int(root + 0.5) ** 2 == integer:
@@ -89,13 +131,22 @@ def is_square(integer):
 
 
 def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
+    """
+    If a contour has less than min_neighbors in its row or col then remove
+    this contour from candidates. We will also remove a contour if it does
+    not have any square neighbors in its row or col as these are false
+    positives.
+    """
+    log.info("remove_lonesome_contours() with less than %d neighbors" % min_neighbors)
+    removed = 0
 
-    # Remove contours that are off by themselves
     while True:
         candidates_to_remove = []
 
         for x in candidates:
-            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) = get_candidate_neighbors(x, candidates, img_width, img_height)
+            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
+                get_candidate_neighbors(x, candidates, img_width, img_height)
+
             if (row_neighbors < min_neighbors or
                 col_neighbors < min_neighbors or
                 not row_square_neighbors or
@@ -106,29 +157,39 @@ def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
         if candidates_to_remove:
             for x in candidates_to_remove:
                 candidates.remove(x)
-                # log.info("removed candidate")
+                removed += 1
         else:
             break
 
+    log.info("remove_lonesome_contours() %d removed, %d remain" % (removed, len(candidates)))
+
 
 def get_cube_size(candidates, img_width, img_height):
+    """
+    Look at all of the contours that are squares and see how many square
+    neighbors they have in their row and col. Store the number of square
+    contours in each row/col in data, then sort data and return the
+    median entry
+    """
     data = []
 
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
         if len(approx) >= 4:
-            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) = get_candidate_neighbors(x, candidates, img_width, img_height)
+            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
+                get_candidate_neighbors(x, candidates, img_width, img_height)
             row_size = row_square_neighbors + 1
             col_size = col_square_neighbors + 1
             data.append(row_size)
             data.append(col_size)
 
     data = sorted(data)
-    log.info("data:\n%s\n" % pformat(data))
-    mid_index = int(len(data)/2)
+    median_index = int(len(data)/2)
+    median_size = data[median_index]
+    log.info("cube size: entries %d, median_index %d, median_size %d, data %s" % (len(data), median_index, median_size, str(data)))
 
-    return data[mid_index]
+    return median_size
 
 
 def get_rubiks_squares(filename):
@@ -218,7 +279,7 @@ def get_rubiks_squares(filename):
                 cX = int(M["m10"] / M["m00"])
                 cY = int(M["m01"] / M["m00"])
 
-                log.info("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
+                log.debug("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
                 candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
@@ -226,10 +287,8 @@ def get_rubiks_squares(filename):
     size = get_cube_size(deepcopy(candidates), img_width, img_height)
     remove_lonesome_contours(candidates, img_width, img_height, size-1)
 
-    log.warning("cube is %dx%dx%d" % (size, size, size))
-
     num_squares = len(candidates)
-    # candidates = sort_by_row_col(deepcopy(candidates))
+    candidates = sort_by_row_col(deepcopy(candidates))
     data = []
     to_draw = []
     to_draw_approx = []
@@ -263,8 +322,9 @@ def get_rubiks_squares(filename):
 
     # Verify we found the right number of squares
     num_squares = len(candidates)
-    if not is_square(num_squares):
-        assert False, "Found %d squares which cannot be right" % num_squares
+
+    if not square_root_is_integer(num_squares):
+        raise Exception("Found %d squares which cannot be right" % num_squares)
 
     return data
 
@@ -314,13 +374,14 @@ def extract_rgb_pixels(target_side):
 
         # target_side is only True when we are debugging an image
         if target_side is not None:
-            if side != target_side:
+            if side == target_side:
+                debug = True
+            else:
                 debug = False
                 continue
-            else:
-                debug = True
 
         filename = "/tmp/rubiks-side-%s.png" % side
+        log.info("Analyze %s" % filename)
 
         if not os.path.exists(filename):
             print "ERROR: %s does not exists" % filename
@@ -328,6 +389,7 @@ def extract_rgb_pixels(target_side):
 
         # data will be a list of (R, G, B) tuples, one entry for each square on a side
         data = get_rubiks_squares(filename)
+        log.info("squares RGB data\n%s\n" % pformat(data))
 
         squares_per_side = len(data)
         size = int(math.sqrt(squares_per_side))
@@ -343,7 +405,6 @@ def extract_rgb_pixels(target_side):
             for col in range(size):
                 square_indexes_for_row.append(init_square_index + (row * size) + col)
             square_indexes.append(square_indexes_for_row)
-        log.info("%s square_indexes %s" % (side, pformat(square_indexes)))
 
         '''
         The L, F, R, and B sides are simple, for the U and D sides the cube in
@@ -355,6 +416,7 @@ def extract_rgb_pixels(target_side):
         else:
             my_indexes = square_indexes
 
+        log.info("%s square_indexes %s" % (side, pformat(square_indexes)))
         log.info("%s my_indexes %s" % (side, pformat(my_indexes)))
         my_indexes = compress_2d_array(my_indexes)
         log.info("%s my_indexes (final) %s" % (side, pformat(my_indexes)))
@@ -362,7 +424,7 @@ def extract_rgb_pixels(target_side):
         for index in range(squares_per_side):
             square_index = my_indexes[index]
             (red, green, blue) = data[index]
-            log.info("square %d, RGB (%d, %d, %d)" % (square_index, red, green, blue))
+            log.info("square %d RGB (%d, %d, %d)" % (square_index, red, green, blue))
 
             # colors is a dict where the square number (as an int) will be
             # the key and a RGB tuple the value
@@ -370,6 +432,7 @@ def extract_rgb_pixels(target_side):
 
         prev_squares_per_side = squares_per_side
         prev_side = side
+        log.info("\n\n\n")
 
     return colors
 
