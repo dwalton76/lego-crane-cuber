@@ -12,9 +12,13 @@ import numpy as np
 import os
 import sys
 
+debug = False
+
 def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
     row_neighbors = 0
+    row_square_neighbors = 0
     col_neighbors = 0
+    col_square_neighbors = 0
 
     width_wiggle = int(img_width * 0.05)
     height_wiggle = int(img_height * 0.09)
@@ -29,10 +33,16 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         if abs(cX - target_cX) <= width_wiggle:
             col_neighbors += 1
 
+            if len(approx) >= 4:
+                col_square_neighbors += 1
+
         if abs(cY - target_cY) <= height_wiggle:
             row_neighbors += 1
 
-    return (row_neighbors, col_neighbors)
+            if len(approx) >= 4:
+                row_square_neighbors += 1
+
+    return (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors)
 
 
 def sort_by_row_col(candidates):
@@ -78,9 +88,50 @@ def is_square(integer):
         return False
 
 
-def get_rubiks_squares(filename):
-    debug = False
+def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
 
+    # Remove contours that are off by themselves
+    while True:
+        candidates_to_remove = []
+
+        for x in candidates:
+            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) = get_candidate_neighbors(x, candidates, img_width, img_height)
+            if (row_neighbors < min_neighbors or
+                col_neighbors < min_neighbors or
+                not row_square_neighbors or
+                not col_square_neighbors):
+
+                candidates_to_remove.append(x)
+
+        if candidates_to_remove:
+            for x in candidates_to_remove:
+                candidates.remove(x)
+                # log.info("removed candidate")
+        else:
+            break
+
+
+def get_cube_size(candidates, img_width, img_height):
+    data = []
+
+    for x in candidates:
+        (index, area, currentContour, approx, cX, cY) = x
+
+        if len(approx) >= 4:
+            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) = get_candidate_neighbors(x, candidates, img_width, img_height)
+            row_size = row_square_neighbors + 1
+            col_size = col_square_neighbors + 1
+            data.append(row_size)
+            data.append(col_size)
+
+    data = sorted(data)
+    log.info("data:\n%s\n" % pformat(data))
+    mid_index = int(len(data)/2)
+
+    return data[mid_index]
+
+
+def get_rubiks_squares(filename):
     image = cv2.imread(filename)
     (img_height, img_width) = image.shape[:2]
 
@@ -112,7 +163,7 @@ def get_rubiks_squares(filename):
     # Use a very high h value so that we really blur the image to remove
     # all spots that might be in the rubiks squares...we want the rubiks
     # squares to be solid black
-    denoised = cv2.fastNlMeansDenoising(thresh, h=120)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=110)
 
     if debug:
         cv2.imshow("denoised", denoised)
@@ -140,46 +191,45 @@ def get_rubiks_squares(filename):
         currentContour = component[0]
         currentHierarchy = component[1]
 
-        # currentHierarchy[2] of -1 means this contour has no children so we know
-        # this is the "inside" contour for a square...some squares get two contours
-        # due to the black border around the edge of the square
-        if True or currentHierarchy[2] == -1:
+        '''
+        Things I used to filter on here but no longer do
+        - currentHierarchy[2] of -1 means this contour has no children so we know
+          this is the "inside" contour for a square...some squares get two contours
+          due to the black border around the edge of the square
 
-            # approximate the contour
-            peri = cv2.arcLength(currentContour, True)
-            approx = cv2.approxPolyDP(currentContour, 0.1 * peri, True)
-            area = cv2.contourArea(currentContour)
+          This ended up filtering out some legit contours of squares so I chopped it
 
-            if area > 100 and len(approx) >= 3:
+        - using 'approx' to determine if the contour has as least 4 corners
 
-                # compute the center of the contour
-                M = cv2.moments(currentContour)
-                if M["m00"]:
-                    cX = int(M["m10"] / M["m00"])
-                    cY = int(M["m01"] / M["m00"])
+          If the square has dent in it (or a splotch, dust, etc) this can cause us to
+          find a contour inside the square but the contour won't be square at all
+        '''
+        # approximate the contour
+        peri = cv2.arcLength(currentContour, True)
+        approx = cv2.approxPolyDP(currentContour, 0.1 * peri, True)
+        area = cv2.contourArea(currentContour)
 
-                    log.info("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
-                    candidates.append((index, area, currentContour, approx, cX, cY))
+        if area > 100:
+
+            # compute the center of the contour
+            M = cv2.moments(currentContour)
+
+            if M["m00"]:
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+
+                log.info("(%d, %d), area %d, corners %d" % (cX, cY, area, len(approx)))
+                candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
-    # Remove contours that are off by themselves
-    while True:
-        candidates_to_remove = []
+    remove_lonesome_contours(candidates, img_width, img_height, 1)
+    size = get_cube_size(deepcopy(candidates), img_width, img_height)
+    remove_lonesome_contours(candidates, img_width, img_height, size-1)
 
-        for x in candidates:
-            (row_neighbors, col_neighbors) = get_candidate_neighbors(x, candidates, img_width, img_height)
-            if row_neighbors <= 1 or col_neighbors <= 1:
-                candidates_to_remove.append(x)
-
-        if candidates_to_remove:
-            for x in candidates_to_remove:
-                candidates.remove(x)
-                # log.info("removed candidate")
-        else:
-            break
+    log.warning("cube is %dx%dx%d" % (size, size, size))
 
     num_squares = len(candidates)
-    candidates = sort_by_row_col(deepcopy(candidates))
+    # candidates = sort_by_row_col(deepcopy(candidates))
     data = []
     to_draw = []
     to_draw_approx = []
@@ -205,7 +255,7 @@ def get_rubiks_squares(filename):
         cv2.drawContours(image, to_draw, -1, (255, 0, 0), 2)
 
         # draw a green line to show the approx for each contour
-        # cv2.drawContours(image, to_draw_approx, -1, (0, 255, 0), 2)
+        cv2.drawContours(image, to_draw_approx, -1, (0, 255, 0), 2)
 
         cv2.imshow("Rubiks Cube Squares", image)
         cv2.waitKey(0)
@@ -241,7 +291,11 @@ def compress_2d_array(original):
 
 
 def extract_rgb_pixels(target_side):
+    global debug
+
     colors = {}
+    prev_squares_per_side = None
+    prev_side = None
     squares_per_side = None
 
     for (side_index, side) in enumerate(('U', 'L', 'F', 'R', 'B', 'D')):
@@ -259,8 +313,12 @@ def extract_rgb_pixels(target_side):
         '''
 
         # target_side is only True when we are debugging an image
-        if target_side is not None and side != target_side:
-            continue
+        if target_side is not None:
+            if side != target_side:
+                debug = False
+                continue
+            else:
+                debug = True
 
         filename = "/tmp/rubiks-side-%s.png" % side
 
@@ -274,6 +332,10 @@ def extract_rgb_pixels(target_side):
         squares_per_side = len(data)
         size = int(math.sqrt(squares_per_side))
         init_square_index = (side_index * squares_per_side) + 1
+
+        if prev_squares_per_side is not None:
+            assert squares_per_side == prev_squares_per_side,\
+                "side %s had %d squares, side %s has %d squares" % (prev_side, prev_squares_per_side, side, squares_per_side)
 
         square_indexes = []
         for row in range(size):
@@ -305,6 +367,9 @@ def extract_rgb_pixels(target_side):
             # colors is a dict where the square number (as an int) will be
             # the key and a RGB tuple the value
             colors[square_index] = (red, green, blue)
+
+        prev_squares_per_side = squares_per_side
+        prev_side = side
 
     return colors
 
