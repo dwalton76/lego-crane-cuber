@@ -297,36 +297,122 @@ def run_action(cube, action):
             # rotate the connecting row(s) of the surrounding sides
             for row in range(rows_to_rotate):
                 left_first_square = squares_per_side + 1 + (row * size)
+                left_last_square = left_first_square + size - 1
+
                 front_first_square = (squares_per_side * 2) + 1 + (row * size)
+                front_last_square = front_first_square + size - 1
+
                 right_first_square = (squares_per_side * 3) + 1 + (row * size)
+                right_last_square = right_first_square + size - 1
+
                 back_first_square = (squares_per_side * 4) + 1 + (row * size)
+                back_last_square = back_first_square + size - 1
+
+                log.info("left first %d, last %d" % (left_first_square, left_last_square))
+                log.info("front first %d, last %d" % (front_first_square, front_last_square))
+                log.info("right first %d, last %d" % (right_first_square, right_last_square))
+                log.info("back first %d, last %d" % (back_first_square, back_last_square))
 
                 if reverse:
-                    for square_index in range(left_first_square, left_first_square + size):
+                    for square_index in range(left_first_square, left_last_square + 1):
                         result[square_index] = cube[square_index + (3 * squares_per_side)]
 
-                    for square_index in range(front_first_square, front_first_square + size):
+                    for square_index in range(front_first_square, front_last_square + 1):
                         result[square_index] = cube[square_index - squares_per_side]
 
-                    for square_index in range(right_first_square, right_first_square + size):
+                    for square_index in range(right_first_square, right_last_square + 1):
                         result[square_index] = cube[square_index - squares_per_side]
 
-                    for square_index in range(back_first_square, back_first_square + size):
+                    for square_index in range(back_first_square, back_last_square + 1):
                         result[square_index] = cube[square_index - squares_per_side]
 
                 else:
-                    for square_index in range(left_first_square, left_first_square + size):
+                    for square_index in range(left_first_square, left_last_square + 1):
                         result[square_index] = cube[square_index + squares_per_side]
 
-                    for square_index in range(front_first_square, front_first_square + size):
+                    for square_index in range(front_first_square, front_last_square + 1):
                         result[square_index] = cube[square_index + squares_per_side]
 
-                    for square_index in range(right_first_square, right_first_square + size):
+                    for square_index in range(right_first_square, right_last_square + 1):
                         result[square_index] = cube[square_index + squares_per_side]
 
-                    for square_index in range(back_first_square, back_first_square + size):
+                    for square_index in range(back_first_square, back_last_square + 1):
                         result[square_index] = cube[square_index - (3 * squares_per_side)]
 
+                log.info('')
+            cube = deepcopy(result)
+
+    # dwalton
+    elif side_name == "L":
+
+        for turn in range(quarter_turns):
+
+            # rotate the connecting row(s) of the surrounding sides
+            for row in range(rows_to_rotate):
+
+                top_first_square = 1 + row
+                top_last_square = top_first_square + ((size - 1) * size)
+
+                front_first_square = (squares_per_side * 2) + 1 + row
+                front_last_square = front_first_square + ((size - 1) * size)
+
+                down_first_square = (squares_per_side * 5) + 1 + row
+                down_last_square = down_first_square + ((size - 1) * size)
+
+                back_first_square = (squares_per_side * 4) + size - row
+                back_last_square = back_first_square + ((size - 1) * size)
+
+                log.info("top first %d, last %d" % (top_first_square, top_last_square))
+                log.info("front first %d, last %d" % (front_first_square, front_last_square))
+                log.info("down first %d, last %d" % (down_first_square, down_last_square))
+                log.info("back first %d, last %d" % (back_first_square, back_last_square))
+
+                top_squares = []
+                for square_index in range(top_first_square, top_last_square + 1, size):
+                    top_squares.append(cube[square_index])
+
+                front_squares = []
+                for square_index in range(front_first_square, front_last_square + 1, size):
+                    front_squares.append(cube[square_index])
+
+                down_squares = []
+                for square_index in range(down_first_square, down_last_square + 1, size):
+                    down_squares.append(cube[square_index])
+
+                back_squares = []
+                for square_index in range(back_first_square, back_last_square + 1, size):
+                    back_squares.append(cube[square_index])
+
+                if reverse:
+                    front_squares = list(reversed(front_squares))
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
+                        result[square_index] = front_squares[index]
+
+                    for (index, square_index) in enumerate(range(front_first_square, front_last_square + 1, size)):
+                        result[square_index] = down_squares[index]
+
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1, size)):
+                        result[square_index] = back_squares[index]
+
+                    top_squares = list(reversed(top_squares))
+                    for (index, square_index) in enumerate(range(back_first_square, back_last_square + 1, size)):
+                        result[square_index] = top_squares[index]
+                else:
+                    back_squares = list(reversed(back_squares))
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
+                        result[square_index] = back_squares[index]
+
+                    for (index, square_index) in enumerate(range(front_first_square, front_last_square + 1, size)):
+                        result[square_index] = top_squares[index]
+
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1, size)):
+                        result[square_index] = front_squares[index]
+
+                    down_squares = list(reversed(down_squares))
+                    for (index, square_index) in enumerate(range(back_first_square, back_last_square + 1, size)):
+                        result[square_index] = down_squares[index]
+
+                log.info('')
             cube = deepcopy(result)
 
     elif side_name == "F":
@@ -336,19 +422,24 @@ def run_action(cube, action):
             # rotate the connecting row(s) of the surrounding sides
             for row in range(rows_to_rotate):
                 top_first_square = (squares_per_side - size) + 1 - (row * size)
+                top_last_square = top_first_square + size - 1
+
                 left_first_square = squares_per_side + 4 - row
                 left_last_square = left_first_square + ((size - 1) * size)
+
                 down_first_square = (squares_per_side * 5) + 1 + (row * size)
+                down_last_square = down_first_square + size - 1
+
                 right_first_square = (squares_per_side * 3) + 1 + row
                 right_last_square = right_first_square + ((size - 1) * size)
 
-                log.info("top first %d" % top_first_square)
+                log.info("top first %d, last %d" % (top_first_square, top_last_square))
                 log.info("left first %d, last %d" % (left_first_square, left_last_square))
-                log.info("down first %d" % down_first_square)
+                log.info("down first %d, last %d" % (down_first_square, down_last_square))
                 log.info("right first %d, last %d" % (right_first_square, right_last_square))
 
                 top_squares = []
-                for square_index in range(top_first_square, top_first_square + size):
+                for square_index in range(top_first_square, top_last_square + 1):
                     top_squares.append(cube[square_index])
 
                 left_squares = []
@@ -356,7 +447,7 @@ def run_action(cube, action):
                     left_squares.append(cube[square_index])
 
                 down_squares = []
-                for square_index in range(down_first_square, down_first_square + size):
+                for square_index in range(down_first_square, down_last_square + 1):
                     down_squares.append(cube[square_index])
 
                 right_squares = []
@@ -365,14 +456,14 @@ def run_action(cube, action):
 
                 if reverse:
                     right_squares = list(reversed(right_squares))
-                    for (index, square_index) in enumerate(range(top_first_square, top_first_square + size)):
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1)):
                         result[square_index] = right_squares[index]
 
                     for (index, square_index) in enumerate(range(left_first_square, left_last_square + 1, size)):
                         result[square_index] = top_squares[index]
 
                     left_squares = list(reversed(left_squares))
-                    for (index, square_index) in enumerate(range(down_first_square, down_first_square + size)):
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1)):
                         result[square_index] = left_squares[index]
 
                     for (index, square_index) in enumerate(range(right_first_square, right_last_square + 1, size)):
@@ -380,59 +471,218 @@ def run_action(cube, action):
 
                 else:
                     left_squares = list(reversed(left_squares))
-                    for (index, square_index) in enumerate(range(top_first_square, top_first_square + size)):
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1)):
                         result[square_index] = left_squares[index]
 
                     for (index, square_index) in enumerate(range(left_first_square, left_last_square + 1, size)):
                         result[square_index] = down_squares[index]
 
                     right_squares = list(reversed(right_squares))
-                    for (index, square_index) in enumerate(range(down_first_square, down_first_square + size)):
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1)):
                         result[square_index] = right_squares[index]
 
                     for (index, square_index) in enumerate(range(right_first_square, right_last_square + 1, size)):
                         result[square_index] = top_squares[index]
 
+                log.info('')
+            cube = deepcopy(result)
+
+    elif side_name == "R":
+
+        for turn in range(quarter_turns):
+
+            # rotate the connecting row(s) of the surrounding sides
+            for row in range(rows_to_rotate):
+
+                top_first_square = size - row
+                top_last_square = squares_per_side
+
+                front_first_square = (squares_per_side * 2) + size - row
+                front_last_square = front_first_square + ((size - 1) * size)
+
+                down_first_square = (squares_per_side * 5) + size - row
+                down_last_square = down_first_square + ((size - 1) * size)
+
+                back_first_square = (squares_per_side * 4) + 1 + row
+                back_last_square = back_first_square + ((size - 1) * size)
+
+                log.info("top first %d, last %d" % (top_first_square, top_last_square))
+                log.info("front first %d, last %d" % (front_first_square, front_last_square))
+                log.info("down first %d, last %d" % (down_first_square, down_last_square))
+                log.info("back first %d, last %d" % (back_first_square, back_last_square))
+
+                top_squares = []
+                for square_index in range(top_first_square, top_last_square + 1, size):
+                    top_squares.append(cube[square_index])
+
+                front_squares = []
+                for square_index in range(front_first_square, front_last_square + 1, size):
+                    front_squares.append(cube[square_index])
+
+                down_squares = []
+                for square_index in range(down_first_square, down_last_square + 1, size):
+                    down_squares.append(cube[square_index])
+
+                back_squares = []
+                for square_index in range(back_first_square, back_last_square + 1, size):
+                    back_squares.append(cube[square_index])
+
+                # dwalton - something in here is hosed
+                if reverse:
+                    back_squares = list(reversed(back_squares))
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
+                        result[square_index] = back_squares[index]
+
+                    for (index, square_index) in enumerate(range(front_first_square, front_last_square + 1, size)):
+                        result[square_index] = top_squares[index]
+
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1, size)):
+                        result[square_index] = front_squares[index]
+
+                    down_squares = list(reversed(down_squares))
+                    for (index, square_index) in enumerate(range(back_first_square, back_last_square + 1, size)):
+                        result[square_index] = down_squares[index]
+
+                else:
+                    front_squares = list(reversed(front_squares))
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
+                        result[square_index] = front_squares[index]
+
+                    for (index, square_index) in enumerate(range(front_first_square, front_last_square + 1, size)):
+                        result[square_index] = down_squares[index]
+
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1, size)):
+                        result[square_index] = back_squares[index]
+
+                    top_squares = list(reversed(top_squares))
+                    for (index, square_index) in enumerate(range(back_first_square, back_last_square + 1, size)):
+                        result[square_index] = top_squares[index]
+
+                log.info('')
+            cube = deepcopy(result)
+
+    elif side_name == "B":
+
+        for turn in range(quarter_turns):
+
+            # rotate the connecting row(s) of the surrounding sides
+            for row in range(rows_to_rotate):
+                top_first_square = 1 + (row * size)
+                top_last_square = top_first_square + size - 1
+
+                left_first_square = squares_per_side + 1 + row
+                left_last_square = left_first_square + ((size - 1) * size)
+
+                down_first_square = (squares_per_side * 6)  - size + 1 - (row * size)
+                down_last_square = down_first_square + size - 1
+
+                right_first_square = (squares_per_side * 3) + size - row
+                right_last_square = right_first_square + ((size - 1) * size)
+
+                log.info("top first %d, last %d" % (top_first_square, top_last_square))
+                log.info("left first %d, last %d" % (left_first_square, left_last_square))
+                log.info("down first %d, last %d" % (down_first_square, down_last_square))
+                log.info("right first %d, last %d" % (right_first_square, right_last_square))
+
+                top_squares = []
+                for square_index in range(top_first_square, top_last_square + 1):
+                    top_squares.append(cube[square_index])
+
+                left_squares = []
+                for square_index in range(left_first_square, left_last_square + 1, size):
+                    left_squares.append(cube[square_index])
+
+                down_squares = []
+                for square_index in range(down_first_square, down_last_square + 1):
+                    down_squares.append(cube[square_index])
+
+                right_squares = []
+                for square_index in range(right_first_square, right_last_square + 1, size):
+                    right_squares.append(cube[square_index])
+
+                if reverse:
+                    left_squares = list(reversed(left_squares))
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1)):
+                        result[square_index] = left_squares[index]
+
+                    for (index, square_index) in enumerate(range(left_first_square, left_last_square + 1, size)):
+                        result[square_index] = down_squares[index]
+
+                    right_squares = list(reversed(right_squares))
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1)):
+                        result[square_index] = right_squares[index]
+
+                    for (index, square_index) in enumerate(range(right_first_square, right_last_square + 1, size)):
+                        result[square_index] = top_squares[index]
+
+                else:
+                    right_squares = list(reversed(right_squares))
+                    for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1)):
+                        result[square_index] = right_squares[index]
+
+                    for (index, square_index) in enumerate(range(left_first_square, left_last_square + 1, size)):
+                        result[square_index] = top_squares[index]
+
+                    left_squares = list(reversed(left_squares))
+                    for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1)):
+                        result[square_index] = left_squares[index]
+
+                    for (index, square_index) in enumerate(range(right_first_square, right_last_square + 1, size)):
+                        result[square_index] = down_squares[index]
+
+                log.info('')
             cube = deepcopy(result)
 
     elif side_name == "D":
 
-        # dwalton here now
         for turn in range(quarter_turns):
 
             # rotate the connecting row(s) of the surrounding sides
             for row in range(rows_to_rotate):
                 left_first_square = (squares_per_side * 2) - size + 1 - (row * size)
+                left_last_square = left_first_square + size - 1
+
                 front_first_square = (squares_per_side * 3) - size + 1 - (row * size)
+                front_last_square = front_first_square + size - 1
+
                 right_first_square = (squares_per_side * 4) - size + 1 - (row * size)
+                right_last_square = right_first_square + size - 1
+
                 back_first_square = (squares_per_side * 5) - size + 1 - (row * size)
+                back_last_square = back_first_square + size - 1
+
+                log.info("left first %d, last %d" % (left_first_square, left_last_square))
+                log.info("front first %d, last %d" % (front_first_square, front_last_square))
+                log.info("right first %d, last %d" % (right_first_square, right_last_square))
+                log.info("back first %d, last %d" % (back_first_square, back_last_square))
 
                 if reverse:
-                    for square_index in range(left_first_square, left_first_square + size):
+                    for square_index in range(left_first_square, left_last_square + 1):
                         result[square_index] = cube[square_index + squares_per_side]
 
-                    for square_index in range(front_first_square, front_first_square + size):
+                    for square_index in range(front_first_square, front_last_square + 1):
                         result[square_index] = cube[square_index + squares_per_side]
 
-                    for square_index in range(right_first_square, right_first_square + size):
+                    for square_index in range(right_first_square, right_last_square + 1):
                         result[square_index] = cube[square_index + squares_per_side]
 
-                    for square_index in range(back_first_square, back_first_square + size):
+                    for square_index in range(back_first_square, back_last_square + 1):
                         result[square_index] = cube[square_index - (3 * squares_per_side)]
 
                 else:
-                    for square_index in range(left_first_square, left_first_square + size):
+                    for square_index in range(left_first_square, left_last_square + 1):
                         result[square_index] = cube[square_index + (3 * squares_per_side)]
 
-                    for square_index in range(front_first_square, front_first_square + size):
+                    for square_index in range(front_first_square, front_last_square + 1):
                         result[square_index] = cube[square_index - squares_per_side]
 
-                    for square_index in range(right_first_square, right_first_square + size):
+                    for square_index in range(right_first_square, right_last_square + 1):
                         result[square_index] = cube[square_index - squares_per_side]
 
-                    for square_index in range(back_first_square, back_first_square + size):
+                    for square_index in range(back_first_square, back_last_square + 1):
                         result[square_index] = cube[square_index - squares_per_side]
 
+                log.info('')
             cube = deepcopy(result)
 
     else:
@@ -483,10 +733,83 @@ if __name__ == '__main__':
         cube = convert_key_strings_to_int(cube)
 
         # Display the initial cube
+        fh.write("<h1>Initial Cube</h1>\n")
         write_cube(fh, cube, size)
 
         # Practice rotating and print the results
-        cube = run_action(cube, "Dw'")
+        # https://ruwix.com/online-puzzle-simulators/4x4x4-rubiks-revenge-cube-simulator.php
+
+        # side flowers
+        # http://www.instructables.com/id/4x4x4-Rubiks-Cube-Opposite-Side-Flowers/?ALLSTEPS
+
+        # d2 - takes two moves
+        cube = run_action(cube, "Dw2")
+        cube = run_action(cube, "D2'")
+        fh.write("<h1>Post step-01-d2</h1>\n")
         write_cube(fh, cube, size)
 
+        cube = run_action(cube, "R2")
+        fh.write("<h1>Post step-02-R2</h1>\n")
+        '''
+        cube = run_action(cube, "L2")
+
+        # d2 - takes two moves
+        cube = run_action(cube, "Dw2")
+        cube = run_action(cube, "D2'")
+
+        cube = run_action(cube, "R2")
+        cube = run_action(cube, "L2")
+        #cube = run_action(cube, "")
+        #cube = run_action(cube, "")
+        '''
+
+
+        '''
+        # cube in a cube
+        # https://www.reddit.com/r/Cubers/comments/3ab8kx/i_cant_find_a_cube_in_a_cube_pattern_for_the_4x4x4/
+        cube = run_action(cube, "F")
+        cube = run_action(cube, "L")
+        cube = run_action(cube, "F")
+        cube = run_action(cube, "U'")
+        cube = run_action(cube, "R")
+        cube = run_action(cube, "U")
+        cube = run_action(cube, "F2")
+        cube = run_action(cube, "L2")
+        cube = run_action(cube, "U'")
+        cube = run_action(cube, "L'")
+        cube = run_action(cube, "B")
+        cube = run_action(cube, "D'")
+        cube = run_action(cube, "B'")
+        cube = run_action(cube, "L2")
+        cube = run_action(cube, "U")
+
+        cube = run_action(cube, "Rw")
+        cube = run_action(cube, "Bw2")
+        cube = run_action(cube, "Rw'")
+        cube = run_action(cube, "Dw")
+        cube = run_action(cube, "Fw2")
+        cube = run_action(cube, "Dw'")
+        cube = run_action(cube, "Rw")
+        cube = run_action(cube, "Bw2")
+        cube = run_action(cube, "Rw'")
+        cube = run_action(cube, "Dw")
+        cube = run_action(cube, "Fw2")
+        cube = run_action(cube, "Dw'")
+
+        cube = run_action(cube, "R")
+        cube = run_action(cube, "B2")
+        cube = run_action(cube, "R'")
+        cube = run_action(cube, "D")
+        cube = run_action(cube, "F2")
+        cube = run_action(cube, "D'")
+        cube = run_action(cube, "R")
+        cube = run_action(cube, "B2")
+        cube = run_action(cube, "R'")
+        cube = run_action(cube, "D")
+        cube = run_action(cube, "F2")
+        cube = run_action(cube, "D'")
+        '''
+
+        fh.write("<h1>Final Cube</h1>\n")
+        write_cube(fh, cube, size)
         write_footer(fh)
