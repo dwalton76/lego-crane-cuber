@@ -5,19 +5,19 @@ CraneCuber
 A Rubiks cube solving robot made from EV3 + 42009
 """
 
+from copy import deepcopy
 from ev3dev.ev3 import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor, Leds
 from math import pi
 from pprint import pformat
-from rubikscolorresolver import RubiksColorSolver2x2x2, RubiksColorSolver3x3x3
 from time import sleep
 import datetime
 import json
 import logging
+import math
 import os
 import signal
 import subprocess
 import sys
-import time
 
 log = logging.getLogger(__name__)
 
@@ -572,7 +572,6 @@ class CraneCuber3x3x3(object):
         log.info(cmd)
         subprocess.call(cmd, shell=True)
 
-        cube_dimensions = '%dx%dx%d' % (self.rows_and_cols, self.rows_and_cols, self.rows_and_cols)
         cmd = ['ssh',
                'robot@%s' % SERVER,
                '/home/robot/lego-crane-cuber/extract_rgb_pixels.py']
@@ -922,18 +921,9 @@ class CraneCuber3x3x3(object):
         """
         https://ruwix.com/the-rubiks-cube/rubiks-cube-patterns-algorithms/
         """
-        tetris = ("L", "R", "F", "B", "U’", "D’", "L’", "R’")
+        # tetris = ("L", "R", "F", "B", "U’", "D’", "L’", "R’")
         checkerboard = ("F", "B2", "R’", "D2", "B", "R", "U", "D’", "R", "L’", "D’", "F’", "R2", "D", "F2", "B’")
-
         self.run_actions(checkerboard)
-
-        '''
-        checkboard
-        - 2min 38s with all speeds at 200
-        - 1min 45s with 300 turn, 300 flip, 400 fast up, 800 fast down
-        - 1min 29s with 400 turn, 400 flip, 800 fast up, 800 fast down
-        - 1min 24s with 400 turn, 600 flip, 1050 fast up, 1050 fast down
-        '''
 
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
@@ -993,7 +983,7 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
             self.flip()
 
 
-class CraneCuber6x6x6x(CraneCuber3x3x3):
+class CraneCuber6x6x6(CraneCuber3x3x3):
 
     def __init__(self, rows_and_cols=6, size_mm=67):
         CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
@@ -1003,3 +993,70 @@ class CraneCuber6x6x6x(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -42
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
         self.rows_in_turntable_to_count_as_face_turn = 6
+
+    def resolve_moves(self):
+        raise Exception("No solver available for 6x6x6x")
+
+
+if __name__ == '__main__':
+
+    # logging.basicConfig(filename='rubiks.log',
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
+    log = logging.getLogger(__name__)
+
+    # Color the errors and warnings in red
+    logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
+    logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
+
+    cc = None
+
+    try:
+        while True:
+            # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
+            cc = CraneCuber3x3x3()
+            cc.scan()
+            cc.get_colors()
+
+            # We have scanned all sides and know how many squares there are, use
+            # this to create an object of the appropriate class
+            #
+            # cc.colors is a dict where the square_index is the key and the RGB is the value
+            colors = deepcopy(cc.colors)
+            squares_per_side = colors.keys()
+            size = int(math.sqrt(squares_per_side))
+
+            if size == 2:
+                cc = CraneCuber2x2x2()
+            elif size == 3:
+                cc = CraneCuber3x3x3()
+            elif size == 4:
+                cc = CraneCuber4x4x4()
+            elif size == 6:
+                cc = CraneCuber6x6x6()
+            else:
+                raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
+
+            cc.colors = colors
+            cc.resolve_colors()
+            cc.resolve_moves()
+            cc.wait_for_touch_sensor()
+
+            if cc.shutdown:
+                break
+
+        cc.shutdown_robot()
+        Leds.set_color(Leds.LEFT, Leds.GREEN)
+        Leds.set_color(Leds.RIGHT, Leds.GREEN)
+
+    except Exception as e:
+        Leds.set_color(Leds.LEFT, Leds.RED)
+        Leds.set_color(Leds.RIGHT, Leds.RED)
+        log.exception(e)
+
+        if cc:
+            cc.shutdown_robot()
+
+        Leds.set_color(Leds.LEFT, Leds.GREEN)
+        Leds.set_color(Leds.RIGHT, Leds.GREEN)
+        sys.exit(1)
