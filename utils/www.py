@@ -342,7 +342,6 @@ def run_action(cube, action):
                 log.info('')
             cube = deepcopy(result)
 
-    # dwalton
     elif side_name == "L":
 
         for turn in range(quarter_turns):
@@ -384,13 +383,13 @@ def run_action(cube, action):
                     back_squares.append(cube[square_index])
 
                 if reverse:
-                    front_squares = list(reversed(front_squares))
                     for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
                         result[square_index] = front_squares[index]
 
                     for (index, square_index) in enumerate(range(front_first_square, front_last_square + 1, size)):
                         result[square_index] = down_squares[index]
 
+                    back_squares = list(reversed(back_squares))
                     for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1, size)):
                         result[square_index] = back_squares[index]
 
@@ -455,17 +454,17 @@ def run_action(cube, action):
                     right_squares.append(cube[square_index])
 
                 if reverse:
-                    right_squares = list(reversed(right_squares))
                     for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1)):
                         result[square_index] = right_squares[index]
 
+                    top_squares = list(reversed(top_squares))
                     for (index, square_index) in enumerate(range(left_first_square, left_last_square + 1, size)):
                         result[square_index] = top_squares[index]
 
-                    left_squares = list(reversed(left_squares))
                     for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1)):
                         result[square_index] = left_squares[index]
 
+                    down_squares = list(reversed(down_squares))
                     for (index, square_index) in enumerate(range(right_first_square, right_last_square + 1, size)):
                         result[square_index] = down_squares[index]
 
@@ -527,7 +526,6 @@ def run_action(cube, action):
                 for square_index in range(back_first_square, back_last_square + 1, size):
                     back_squares.append(cube[square_index])
 
-                # dwalton - something in here is hosed
                 if reverse:
                     back_squares = list(reversed(back_squares))
                     for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
@@ -544,13 +542,13 @@ def run_action(cube, action):
                         result[square_index] = down_squares[index]
 
                 else:
-                    front_squares = list(reversed(front_squares))
                     for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1, size)):
                         result[square_index] = front_squares[index]
 
                     for (index, square_index) in enumerate(range(front_first_square, front_last_square + 1, size)):
                         result[square_index] = down_squares[index]
 
+                    back_squares = list(reversed(back_squares))
                     for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1, size)):
                         result[square_index] = back_squares[index]
 
@@ -616,17 +614,17 @@ def run_action(cube, action):
                         result[square_index] = top_squares[index]
 
                 else:
-                    right_squares = list(reversed(right_squares))
                     for (index, square_index) in enumerate(range(top_first_square, top_last_square + 1)):
                         result[square_index] = right_squares[index]
 
+                    top_squares = list(reversed(top_squares))
                     for (index, square_index) in enumerate(range(left_first_square, left_last_square + 1, size)):
                         result[square_index] = top_squares[index]
 
-                    left_squares = list(reversed(left_squares))
                     for (index, square_index) in enumerate(range(down_first_square, down_last_square + 1)):
                         result[square_index] = left_squares[index]
 
+                    down_squares = list(reversed(down_squares))
                     for (index, square_index) in enumerate(range(right_first_square, right_last_square + 1, size)):
                         result[square_index] = down_squares[index]
 
@@ -739,34 +737,25 @@ if __name__ == '__main__':
         # Practice rotating and print the results
         # https://ruwix.com/online-puzzle-simulators/4x4x4-rubiks-revenge-cube-simulator.php
 
-        # side flowers
-        # http://www.instructables.com/id/4x4x4-Rubiks-Cube-Opposite-Side-Flowers/?ALLSTEPS
-
-        # d2 - takes two moves
-        cube = run_action(cube, "Dw2")
-        cube = run_action(cube, "D2'")
-        fh.write("<h1>Post step-01-d2</h1>\n")
+        '''
+        cube = run_action(cube, "Dw")
+        cube = run_action(cube, "D'")
+        fh.write("<h1>Post step-01-Dw D'</h1>\n")
         write_cube(fh, cube, size)
 
-        cube = run_action(cube, "R2")
-        fh.write("<h1>Post step-02-R2</h1>\n")
-        '''
-        cube = run_action(cube, "L2")
+        cube = run_action(cube, "Fw")
+        cube = run_action(cube, "F'")
+        fh.write("<h1>Post step-02-Fw F'</h1>\n")
+        write_cube(fh, cube, size)
 
-        # d2 - takes two moves
-        cube = run_action(cube, "Dw2")
-        cube = run_action(cube, "D2'")
-
-        cube = run_action(cube, "R2")
-        cube = run_action(cube, "L2")
-        #cube = run_action(cube, "")
-        #cube = run_action(cube, "")
+        cube = run_action(cube, "B'")
+        #fh.write("<h1>Post step-03 U</h1>\n")
+        #write_cube(fh, cube, size)
         '''
 
-
-        '''
-        # cube in a cube
+        # 4x4x4 cube in a cube
         # https://www.reddit.com/r/Cubers/comments/3ab8kx/i_cant_find_a_cube_in_a_cube_pattern_for_the_4x4x4/
+        '''
         cube = run_action(cube, "F")
         cube = run_action(cube, "L")
         cube = run_action(cube, "F")
