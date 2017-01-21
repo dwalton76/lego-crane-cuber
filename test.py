@@ -73,6 +73,8 @@ test_cases = (
     ('6x6x6 solved 02',    'test-data/6x6x6-solved-02.txt'),
 )
 
+'''
+'''
 #test_cases = (
 #    ('3x3x3 random 02',    'test-data/3x3x3-random-02.txt'),
 #    #('4x4x4 random 01',    'test-data/4x4x4-random-01.txt'),

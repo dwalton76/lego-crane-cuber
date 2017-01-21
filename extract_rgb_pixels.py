@@ -35,9 +35,9 @@ import sys
 debug = False
 
 median_square_area = None
-foo = []
+square_vs_non_square_debug_printed = []
 
-def is_square(cX, cY, approx, target_area=None):
+def is_square(cX, cY, approx, target_area=None, strict=False):
     """
     A few rules for a rubiks cube square
     - it has to have four sides
@@ -46,41 +46,48 @@ def is_square(cX, cY, approx, target_area=None):
     """
     # disable this for now
     # target_area = None
-    global foo
+    global square_vs_non_square_debug_printed
 
-    if len(approx) >= 4:
+    if (strict and len(approx) == 4) or (not strict and len(approx) >= 4):
         (x, y, w, h) = cv2.boundingRect(approx)
         aspect_ratio = w / float(h)
+
+        if strict:
+            aspect_ratio_min = 0.70
+            aspect_ratio_max = 1.30
+        else:
+            aspect_ratio_min = 0.40
+            aspect_ratio_max = 1.60
 
         # disable this for now
         # aspect_ratio = 1
 
         # a square will have an aspect ratio that is approximately
         # equal to one, otherwise, the shape is a rectangle
-        if aspect_ratio >= 0.75 and aspect_ratio <= 1.25:
+        if aspect_ratio >= aspect_ratio_min and aspect_ratio <= aspect_ratio_max:
 
             if target_area:
                 area = float(w * h)
                 area_ratio = float(target_area / area)
 
-                if area_ratio >= 0.55 and area_ratio <= 1.20:
-                    if (cX, cY) not in foo:
+                if area_ratio >= 0.55 and area_ratio <= 1.35:
+                    if (cX, cY) not in square_vs_non_square_debug_printed:
                         log.info("SQUARE: (%d, %d) aspect_ratio %s, area_ratio %s" % (cX, cY, aspect_ratio, area_ratio))
-                        foo.append((cX, cY))
+                        square_vs_non_square_debug_printed.append((cX, cY))
                     return True
                 else:
-                    if (cX, cY) not in foo:
+                    if (cX, cY) not in square_vs_non_square_debug_printed:
                         log.info("NOT SQUARE: (%d, %d) area %s, target_area %s, area_ratio %s" % (cX, cY, area, target_area, area_ratio))
-                        foo.append((cX, cY))
+                        square_vs_non_square_debug_printed.append((cX, cY))
             else:
-                if (cX, cY) not in foo:
+                if (cX, cY) not in square_vs_non_square_debug_printed:
                     log.info("SQUARE: (%d, %d) aspect_ratio %s, no target area" % (cX, cY, aspect_ratio))
-                    foo.append((cX, cY))
+                    square_vs_non_square_debug_printed.append((cX, cY))
                 return True
         else:
-            if (cX, cY) not in foo:
+            if (cX, cY) not in square_vs_non_square_debug_printed:
                 log.info("NOT SQUARE: (%d, %d) aspect_ratio %s" % (cX, cY, aspect_ratio))
-                foo.append((cX, cY))
+                square_vs_non_square_debug_printed.append((cX, cY))
 
     return False
 
@@ -201,7 +208,6 @@ def square_root_is_integer(integer):
 def remove_contours_outside_cube(candidates, top, right, bottom, left):
     removed = 0
     candidates_to_remove = []
-    threshold = 0.10
 
     # These are percentages of the image width and height
     ROW_THRESHOLD = 0.12
@@ -224,6 +230,29 @@ def remove_contours_outside_cube(candidates, top, right, bottom, left):
             removed += 1
 
     log.info("remove_contours_outside_cube() %d removed, %d remain" % (removed, len(candidates)))
+
+
+def remove_rogue_non_squares(size, candidates, img_width, img_height):
+    removed = 0
+    candidates_to_remove = []
+
+    for x in candidates:
+        (index, area, currentContour, approx, cX, cY) = x
+
+        if not is_square(cX, cY, approx, median_square_area):
+            (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
+                get_candidate_neighbors(x, candidates, img_width, img_height)
+
+            # not row_square_neighbors or not col_square_neighbors):
+            if row_square_neighbors == size or col_square_neighbors == size:
+                candidates_to_remove.append(x)
+
+    if candidates_to_remove:
+        for x in candidates_to_remove:
+            candidates.remove(x)
+            removed += 1
+
+    log.info("remove_rogue_non_squares() %d removed, %d remain" % (removed, len(candidates)))
 
 
 def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
@@ -257,16 +286,6 @@ def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
                 candidates_to_remove.append(x)
                 log.info("remove_lonesome_contours() (%d, %d) removed due to no row and col square neighbors" % (cX, cY))
 
-            '''
-            elif not row_square_neighbors:
-                candidates_to_remove.append(x)
-                log.info("remove_lonesome_contours() (%d, %d) removed due to no row_square_neighbors" % (cX, cY))
-
-            elif not col_square_neighbors:
-                candidates_to_remove.append(x)
-                log.info("remove_lonesome_contours() (%d, %d) removed due to no col_square_neighbors" % (cX, cY))
-            '''
-
         if candidates_to_remove:
             for x in candidates_to_remove:
                 candidates.remove(x)
@@ -290,11 +309,11 @@ def get_cube_size(candidates, img_width, img_height):
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
-        if is_square(cX, cY, approx):
+        if is_square(cX, cY, approx, strict=True):
             square_areas.append(int(area))
 
-    global foo
-    foo = []
+    global square_vs_non_square_debug_printed
+    square_vs_non_square_debug_printed = []
     log.warning("reset SQUARE vs NOT SQUARE debugs")
     square_areas = sorted(square_areas)
     num_squares = len(square_areas)
@@ -317,7 +336,7 @@ def get_cube_size(candidates, img_width, img_height):
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
-        if is_square(cX, cY, approx, median_square_area):
+        if is_square(cX, cY, approx, median_square_area, strict=True):
             (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
                 get_candidate_neighbors(x, candidates, img_width, img_height)
             row_size = row_square_neighbors + 1
@@ -339,7 +358,6 @@ def get_cube_size(candidates, img_width, img_height):
 
             if right is None or cX > right:
                 right = cX
-            log.info("cube size (%d, %d) top %s, right %s, bottom %s, left %s" % (cX, cY, top, right, bottom, left))
 
     data = sorted(data)
     median_index = int(len(data)/2)
@@ -459,7 +477,7 @@ def get_rubiks_squares(filename):
         if has_parent:
             continue
 
-        if area > 20:
+        if area > 30:
 
             # compute the center of the contour
             M = cv2.moments(currentContour)
@@ -473,16 +491,18 @@ def get_rubiks_squares(filename):
         index += 1
 
     draw_cube(image, candidates, "pre lonesome removal #1")
-
     remove_lonesome_contours(candidates, img_width, img_height, 1)
     draw_cube(image, candidates, "post lonesome removal #1")
 
-    # get the extreme coordinates for any of the obvious squares
+    # get the extreme coordinates for any of the obvious squares and
+    # remove all contours outside of those coordinates
     (size, top, right, bottom, left) =\
         get_cube_size(deepcopy(candidates), img_width, img_height)
-
     remove_contours_outside_cube(candidates, top, right, bottom, left)
     draw_cube(image, candidates, "post outside square removal")
+
+    remove_rogue_non_squares(size, candidates, img_width, img_height)
+    draw_cube(image, candidates, "post rogue non-square removal")
 
     num_squares = len(candidates)
 
@@ -542,7 +562,7 @@ def compress_2d_array(original):
 
 def extract_rgb_pixels(target_side):
     global debug
-    global foo
+    global square_vs_non_square_debug_printed
     global median_square_area
 
     colors = {}
