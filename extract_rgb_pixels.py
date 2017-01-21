@@ -34,6 +34,56 @@ import sys
 # debug will be set to True in this scenario
 debug = False
 
+median_square_area = None
+foo = []
+
+def is_square(cX, cY, approx, target_area=None):
+    """
+    A few rules for a rubiks cube square
+    - it has to have four sides
+    - it must not be rotated (ie not a diamond)
+    - (optional) it must be roughly the same size all of the other squares
+    """
+    # disable this for now
+    # target_area = None
+    global foo
+
+    if len(approx) >= 4:
+        (x, y, w, h) = cv2.boundingRect(approx)
+        aspect_ratio = w / float(h)
+
+        # disable this for now
+        # aspect_ratio = 1
+
+        # a square will have an aspect ratio that is approximately
+        # equal to one, otherwise, the shape is a rectangle
+        if aspect_ratio >= 0.75 and aspect_ratio <= 1.25:
+
+            if target_area:
+                area = float(w * h)
+                area_ratio = float(target_area / area)
+
+                if area_ratio >= 0.55 and area_ratio <= 1.20:
+                    if (cX, cY) not in foo:
+                        log.info("SQUARE: (%d, %d) aspect_ratio %s, area_ratio %s" % (cX, cY, aspect_ratio, area_ratio))
+                        foo.append((cX, cY))
+                    return True
+                else:
+                    if (cX, cY) not in foo:
+                        log.info("NOT SQUARE: (%d, %d) area %s, target_area %s, area_ratio %s" % (cX, cY, area, target_area, area_ratio))
+                        foo.append((cX, cY))
+            else:
+                if (cX, cY) not in foo:
+                    log.info("SQUARE: (%d, %d) aspect_ratio %s, no target area" % (cX, cY, aspect_ratio))
+                    foo.append((cX, cY))
+                return True
+        else:
+            if (cX, cY) not in foo:
+                log.info("NOT SQUARE: (%d, %d) aspect_ratio %s" % (cX, cY, aspect_ratio))
+                foo.append((cX, cY))
+
+    return False
+
 
 def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
     """
@@ -61,8 +111,11 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         (target_cX, target_cY, width_wiggle, height_wiggle))
 
     for x in candidates:
+
+        # do not count yourself
         if x == target_tuple:
             continue
+
         (index, area, currentContour, approx, cX, cY) = x
         x_delta = abs(cX - target_cX)
         y_delta = abs(cY - target_cY)
@@ -70,7 +123,7 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         if x_delta <= width_wiggle:
             col_neighbors += 1
 
-            if len(approx) >= 4:
+            if is_square(cX, cY, approx, median_square_area):
                 col_square_neighbors += 1
                 log.debug("(%d, %d) is a square col neighbor" % (cX, cY))
             else:
@@ -81,7 +134,7 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         if y_delta <= height_wiggle:
             row_neighbors += 1
 
-            if len(approx) >= 4:
+            if is_square(cX, cY, approx, median_square_area):
                 row_square_neighbors += 1
                 log.debug("(%d, %d) is a square row neighbor" % (cX, cY))
             else:
@@ -145,6 +198,34 @@ def square_root_is_integer(integer):
         return False
 
 
+def remove_contours_outside_cube(candidates, top, right, bottom, left):
+    removed = 0
+    candidates_to_remove = []
+    threshold = 0.10
+
+    # These are percentages of the image width and height
+    ROW_THRESHOLD = 0.12
+    COL_THRESHOLD = 0.10
+
+    top = top * (1 - ROW_THRESHOLD)
+    bottom = bottom * (1 + ROW_THRESHOLD)
+    left = left * (1 - COL_THRESHOLD)
+    right = right * (1 + COL_THRESHOLD)
+
+    for x in candidates:
+        (index, area, currentContour, approx, cX, cY) = x
+
+        if cY < top or cY > bottom or cX < left or cX > right:
+            candidates_to_remove.append(x)
+
+    if candidates_to_remove:
+        for x in candidates_to_remove:
+            candidates.remove(x)
+            removed += 1
+
+    log.info("remove_contours_outside_cube() %d removed, %d remain" % (removed, len(candidates)))
+
+
 def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
     """
     If a contour has less than min_neighbors in its row or col then remove
@@ -166,19 +247,25 @@ def remove_lonesome_contours(candidates, img_width, img_height, min_neighbors):
 
             if row_neighbors < min_neighbors:
                 candidates_to_remove.append(x)
-                log.warning("remove_lonesome_contours() (%d, %d) removed due to row_neighbors %d < %d" % (cX, cY, row_neighbors, min_neighbors))
+                log.info("remove_lonesome_contours() (%d, %d) removed due to row_neighbors %d < %d" % (cX, cY, row_neighbors, min_neighbors))
 
             elif col_neighbors < min_neighbors:
                 candidates_to_remove.append(x)
-                log.warning("remove_lonesome_contours() (%d, %d) removed due to col_neighbors %d < %d" % (cX, cY, col_neighbors, min_neighbors))
+                log.info("remove_lonesome_contours() (%d, %d) removed due to col_neighbors %d < %d" % (cX, cY, col_neighbors, min_neighbors))
 
+            elif not row_square_neighbors and not col_square_neighbors:
+                candidates_to_remove.append(x)
+                log.info("remove_lonesome_contours() (%d, %d) removed due to no row and col square neighbors" % (cX, cY))
+
+            '''
             elif not row_square_neighbors:
                 candidates_to_remove.append(x)
-                log.warning("remove_lonesome_contours() (%d, %d) removed due to no row_square_neighbors" % (cX, cY))
+                log.info("remove_lonesome_contours() (%d, %d) removed due to no row_square_neighbors" % (cX, cY))
 
             elif not col_square_neighbors:
                 candidates_to_remove.append(x)
-                log.warning("remove_lonesome_contours() (%d, %d) removed due to no col_square_neighbors" % (cX, cY))
+                log.info("remove_lonesome_contours() (%d, %d) removed due to no col_square_neighbors" % (cX, cY))
+            '''
 
         if candidates_to_remove:
             for x in candidates_to_remove:
@@ -197,74 +284,140 @@ def get_cube_size(candidates, img_width, img_height):
     contours in each row/col in data, then sort data and return the
     median entry
     """
+    # Find the median area of all square contours and find the top, right,
+    # bottom, left boundry of all square contours
+    square_areas = []
+    for x in candidates:
+        (index, area, currentContour, approx, cX, cY) = x
+
+        if is_square(cX, cY, approx):
+            square_areas.append(int(area))
+
+    global foo
+    foo = []
+    log.warning("reset SQUARE vs NOT SQUARE debugs")
+    square_areas = sorted(square_areas)
+    num_squares = len(square_areas)
+    median_square_area_index = int(num_squares/2)
+    global median_square_area
+    median_square_area = int(square_areas[median_square_area_index])
+
+    log.info("%d squares, median index %d, median area %d, all square areas %s" %\
+        (num_squares, median_square_area_index, median_square_area, ','.join(map(str, square_areas))))
+
+    # Now find all of the square contours that are the same size (roughly) as the
+    # median square size. Look to see how many square neighbors are in the row and
+    # col for each square contour.
     data = []
+    top = None
+    right = None
+    bottom = None
+    left = None
 
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
-        if len(approx) >= 4:
+        if is_square(cX, cY, approx, median_square_area):
             (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
                 get_candidate_neighbors(x, candidates, img_width, img_height)
             row_size = row_square_neighbors + 1
             col_size = col_square_neighbors + 1
-            data.append(row_size)
-            data.append(col_size)
+
+            if row_size > col_size:
+                data.append(row_size)
+            else:
+                data.append(col_size)
+
+            if top is None or cY < top:
+                top = cY
+
+            if bottom is None or cY > bottom:
+                bottom = cY
+
+            if left is None or cX < left:
+                left = cX
+
+            if right is None or cX > right:
+                right = cX
+            log.info("cube size (%d, %d) top %s, right %s, bottom %s, left %s" % (cX, cY, top, right, bottom, left))
 
     data = sorted(data)
     median_index = int(len(data)/2)
     median_size = data[median_index]
-    log.info("cube size: entries %d, median_index %d, median_size %d, data %s" % (len(data), median_index, median_size, str(data)))
 
-    return median_size
+    log.info("cube size...%d squares, data %s" % (len(data), ','.join(map(str, data))))
+    log.warning("cube size is %d, top %s, right %s, bottom %s, left %s" %\
+        (median_size, top, right, bottom, left))
+
+    return (median_size, top, right, bottom, left)
+
+
+def draw_cube(image, candidates, desc):
+
+    if not debug:
+        return
+
+    if candidates:
+        to_draw = []
+        to_draw_square = []
+        to_draw_approx = []
+
+        for (index, area, contour, approx, cX, cY) in candidates:
+            if is_square(cX, cY, approx, median_square_area):
+                to_draw_square.append(contour)
+            else:
+                to_draw.append(contour)
+                to_draw_approx.append(approx)
+
+        tmp_image = image.copy()
+        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
+        cv2.drawContours(tmp_image, to_draw_approx, -1, (0, 255, 0), 2)
+        cv2.drawContours(tmp_image, to_draw_square, -1, (0, 0, 255), 2)
+
+        cv2.imshow(desc, tmp_image)
+        cv2.waitKey(0)
+    else:
+        cv2.imshow(desc, image)
+        cv2.waitKey(0)
 
 
 def get_rubiks_squares(filename):
     image = cv2.imread(filename)
     (img_height, img_width) = image.shape[:2]
 
-    # convert the image to grayscale
-    # in the image
+    # convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-    #if debug:
-    #    cv2.imshow("gray", gray)
-    #    cv2.waitKey(0)
-
+    #draw_cube(gray, None, "gray")
 
     blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-
-    #if debug:
-    #    cv2.imshow("blurred", blurred)
-    #    cv2.waitKey(0)
-
+    #draw_cube(blurred, None, "blurred")
 
     # Threshold settings from here:
     # http://opencvpython.blogspot.com/2012/06/sudoku-solver-part-2.html
-    thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 15, 2)
-
-    #if debug:
-    #    cv2.imshow("thresh", thresh)
-    #    cv2.waitKey(0)
-
+    thresh = cv2.adaptiveThreshold(blurred, 255, 1, 1, 11, 2)
+    #draw_cube(thresh, None, "thresh")
 
     # Use a very high h value so that we really blur the image to remove
     # all spots that might be in the rubiks squares...we want the rubiks
     # squares to be solid black
-    denoised = cv2.fastNlMeansDenoising(thresh, h=90)
-
-    if debug:
-        cv2.imshow("denoised", denoised)
-        cv2.waitKey(0)
+    denoised = cv2.fastNlMeansDenoising(thresh, h=50)
+    draw_cube(denoised, None, "denoised")
 
     # Now invert the image so that the rubiks squares are white but most
     # of the rest of the image is black
-    thresh2 = cv2.threshold(denoised, 10, 255, cv2.THRESH_BINARY_INV)[1]
+    inverted = cv2.threshold(denoised, 10, 255, cv2.THRESH_BINARY_INV)[1]
+    #draw_cube(inverted, None, "inverted")
 
-    if debug:
-        cv2.imshow("inverted", thresh2)
-        cv2.waitKey(0)
+    # Erode the image to remove any really thin lines that might be connected our squares
+    kernel = np.ones((4,4), np.uint8)
+    eroded = cv2.erode(inverted, kernel, iterations=2)
+    #draw_cube(eroded, None, "eroded")
 
-    (contours, hierarchy) = cv2.findContours(thresh2.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # Now dilate the image to make the squares a little larger
+    dilated = cv2.dilate(eroded, kernel, iterations=1)
+    draw_cube(dilated, None, "dilated")
+
+    (contours, hierarchy) = cv2.findContours(dilated.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     candidates = []
     hierarchy = hierarchy[0] # get the actual inner list of hierarchy descriptions
@@ -306,7 +459,7 @@ def get_rubiks_squares(filename):
         if has_parent:
             continue
 
-        if area > 100:
+        if area > 20:
 
             # compute the center of the contour
             M = cv2.moments(currentContour)
@@ -319,49 +472,27 @@ def get_rubiks_squares(filename):
                 candidates.append((index, area, currentContour, approx, cX, cY))
         index += 1
 
-    if debug:
-        to_draw = []
-        for (index, area, contour, approx, cX, cY) in candidates:
-            to_draw.append(contour)
-        tmp_image = image.copy()
-        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
-        cv2.imshow("pre lonesome removal #1", tmp_image)
-        cv2.waitKey(0)
+    draw_cube(image, candidates, "pre lonesome removal #1")
 
     remove_lonesome_contours(candidates, img_width, img_height, 1)
+    draw_cube(image, candidates, "post lonesome removal #1")
 
-    if debug:
-        to_draw = []
-        to_draw_approx = []
-        for (index, area, contour, approx, cX, cY) in candidates:
-            to_draw.append(contour)
-            to_draw_approx.append(approx)
+    # get the extreme coordinates for any of the obvious squares
+    (size, top, right, bottom, left) =\
+        get_cube_size(deepcopy(candidates), img_width, img_height)
 
-        tmp_image = image.copy()
-        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
-        cv2.drawContours(tmp_image, to_draw_approx, -1, (0, 255, 0), 2)
-
-        cv2.imshow("post lonesome removal #1", tmp_image)
-        cv2.waitKey(0)
-
-    size = get_cube_size(deepcopy(candidates), img_width, img_height)
-
-    remove_lonesome_contours(candidates, img_width, img_height, int(size/2))
-
-    if debug:
-        to_draw = []
-        for (index, area, contour, approx, cX, cY) in candidates:
-            to_draw.append(contour)
-        tmp_image = image.copy()
-        cv2.drawContours(tmp_image, to_draw, -1, (255, 0, 0), 2)
-        cv2.imshow("post lonesome removal #2", tmp_image)
-        cv2.waitKey(0)
+    remove_contours_outside_cube(candidates, top, right, bottom, left)
+    draw_cube(image, candidates, "post outside square removal")
 
     num_squares = len(candidates)
+
+    if not square_root_is_integer(num_squares):
+        remove_lonesome_contours(candidates, img_width, img_height, int(size/2))
+        draw_cube(image, candidates, "post lonesome removal #2")
+        num_squares = len(candidates)
+
     candidates = sort_by_row_col(deepcopy(candidates))
     data = []
-    to_draw = []
-    to_draw_approx = []
 
     for (index, area, contour, approx, cX, cY) in candidates:
         # We used to use the value of the center pixel
@@ -376,19 +507,8 @@ def get_rubiks_squares(filename):
 
         #log.info("normal BGR (%s, %s, %s), mean BGR (%s, %s, %s)" %\
         #    (blue, green, red, mean_blue, mean_green, mean_red))
-        to_draw.append(contour)
-        to_draw_approx.append(approx)
 
-    if debug:
-        # draw a blue line to show the contours we IDed as the squares of the cube
-        cv2.drawContours(image, to_draw, -1, (255, 0, 0), 2)
-
-        # draw a green line to show the approx for each contour
-        cv2.drawContours(image, to_draw_approx, -1, (0, 255, 0), 2)
-
-        cv2.imshow("Rubiks Cube Squares", image)
-        cv2.waitKey(0)
-        # cv2.imwrite('foo.png', image)
+    draw_cube(image, candidates, "Final")
 
     # Verify we found the right number of squares
     num_squares = len(candidates)
@@ -422,6 +542,8 @@ def compress_2d_array(original):
 
 def extract_rgb_pixels(target_side):
     global debug
+    global foo
+    global median_square_area
 
     colors = {}
     prev_squares_per_side = None
@@ -442,7 +564,7 @@ def extract_rgb_pixels(target_side):
         calculate the index of the first square for each side
         '''
 
-        # target_side is only True when we are debugging an image
+        # target_side is only non-None when we are debugging the image for a specific side
         if target_side is not None:
             if side == target_side:
                 debug = True
@@ -451,7 +573,8 @@ def extract_rgb_pixels(target_side):
                 continue
 
         filename = "/tmp/rubiks-side-%s.png" % side
-        log.info("Analyze %s" % filename)
+        log.warning("Analyze %s" % filename)
+        median_square_area = None
 
         if not os.path.exists(filename):
             print "ERROR: %s does not exists" % filename
@@ -486,10 +609,10 @@ def extract_rgb_pixels(target_side):
         else:
             my_indexes = square_indexes
 
-        log.info("%s square_indexes %s" % (side, pformat(square_indexes)))
-        log.info("%s my_indexes %s" % (side, pformat(my_indexes)))
+        log.info("%s square_indexes\n%s\n" % (side, pformat(square_indexes)))
+        log.info("%s my_indexes\n%s\n" % (side, pformat(my_indexes)))
         my_indexes = compress_2d_array(my_indexes)
-        log.info("%s my_indexes (final) %s" % (side, pformat(my_indexes)))
+        log.info("%s my_indexes (final) %s" % (side, str(my_indexes)))
 
         for index in range(squares_per_side):
             square_index = my_indexes[index]

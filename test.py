@@ -8,17 +8,24 @@ import sys
 
 
 def rgb_matches(text1, text2):
-    result = True
     data1 = json.loads(text1)
     data2 = json.loads(text2)
 
     for (square_index, rgb1) in sorted(data1.items()):
-        rgb2 = data2[square_index]
-        if rgb1 != rgb2:
-            resulit = False
-            break
+        try:
+            rgb2 = data2[square_index]
+        except KeyError:
+            return False
 
-    return result
+        (r1, g1, b1) = rgb1
+        (r2, g2, b2) = rgb2
+
+        if (abs(r1 - r2) >= 10 or
+            abs(g1 - g2) >= 10 or
+            abs(b1 - b2) >= 10):
+            return False
+
+    return True
 
 
 def get_rgb_delta(text1, text2):
@@ -27,7 +34,12 @@ def get_rgb_delta(text1, text2):
     data2 = json.loads(text2)
 
     for (square_index, rgb1) in sorted(data1.items()):
-        rgb2 = data2[square_index]
+        try:
+            rgb2 = data2[square_index]
+        except KeyError:
+            result.append("%2d: %14s != ERROR" % (int(square_index), pformat(rgb1)))
+            continue
+
         if rgb1 != rgb2:
             result.append("%2d: %14s != %-14s" % (int(square_index), pformat(rgb1), pformat(rgb2)))
 
@@ -57,7 +69,14 @@ test_cases = (
     ('4x4x4 random 01',    'test-data/4x4x4-random-01.txt'),
     ('4x4x4 random 02',    'test-data/4x4x4-random-02.txt'),
     ('4x4x4 random 03',    'test-data/4x4x4-random-03.txt'),
+    ('6x6x6 solved 01',    'test-data/6x6x6-solved-01.txt'),
+    ('6x6x6 solved 02',    'test-data/6x6x6-solved-02.txt'),
 )
+
+#test_cases = (
+#    ('3x3x3 random 02',    'test-data/3x3x3-random-02.txt'),
+#    #('4x4x4 random 01',    'test-data/4x4x4-random-01.txt'),
+#)
 
 results = []
 
