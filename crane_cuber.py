@@ -22,7 +22,7 @@ import sys
 log = logging.getLogger(__name__)
 
 # http://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id
-SERVER = '192.168.0.5'
+SERVER = '192.168.0.4'
 
 # positive moves to init position
 # negative moves towards camera
@@ -112,7 +112,7 @@ class CraneCuber3x3x3(object):
         self.elevator.stop(stop_action='brake')
 
         log.info("Initialize flipper %s" % self.flipper)
-        self.flipper.run_forever(speed_sp=60, stop_action='hold')
+        self.flipper.run_forever(speed_sp=100, stop_action='hold')
         self.flipper.wait_until('running')
         self.flipper.wait_until('stalled')
         self.flipper.stop()
@@ -505,6 +505,7 @@ class CraneCuber3x3x3(object):
                          '--no-info',
                          '-s', 'brightness=120%',
                          '-r', '352x240',
+                         #'-r', '176x120',
                          '--png', '1',
                          png_filename])
 
@@ -584,8 +585,8 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        log.info("RGB json:\n%s\n" % json.dumps(self.colors))
-        log.info("RGB pformat:\n%s\n" % pformat(self.colors))
+        log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
+        # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
         self.cube_for_resolver = subprocess.check_output(['ssh',
                                                           'robot@%s' % SERVER,
                                                           '/home/robot/rubiks-color-resolver/resolver.py',
@@ -962,9 +963,10 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 53
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -85
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 32
+        # 60 is perfect for clockwise
+        self.TURN_BLOCKED_TOUCH_DEGREES = 59
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 20
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 4
 
     def resolve_moves(self):
@@ -1011,6 +1013,14 @@ if __name__ == '__main__':
 
     cc = None
 
+    '''
+    # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
+    cc = CraneCuber4x4x4()
+    cc.run_actions(("U", ))
+    cc.shutdown_robot()
+    sys.exit(0)
+    '''
+
     try:
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
@@ -1023,7 +1033,7 @@ if __name__ == '__main__':
             #
             # cc.colors is a dict where the square_index is the key and the RGB is the value
             colors = deepcopy(cc.colors)
-            squares_per_side = colors.keys()
+            squares_per_side = len(colors.keys()) / 6
             size = int(math.sqrt(squares_per_side))
 
             if size == 2:
