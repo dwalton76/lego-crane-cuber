@@ -997,7 +997,61 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         self.rows_in_turntable_to_count_as_face_turn = 3
 
     def resolve_moves(self):
-        raise Exception("No solver available for 5x5x5")
+        # java -cp bin -Xmx4g justsomerandompackagename.solver LLBUULLBUUDUUDDLLLBBLLURRDDUUBDDUUBDDDFFDDFBBDDFBBFLRBBFLRBBBBRDDDDLRRDDLRRFFLFFRRLDDRRLBBRRBRRRRBRRUULUUFFLUUUUFRRBBFFLBBFFLLLLDDLLDFFFFBUUUURFFUURFF
+
+        if self.shutdown:
+            return
+
+        # solver needs U R L B F D order
+        cube_string = (self.cube_for_resolver[0:26] +    # U
+                       self.cube_for_resolver[76:101] +  # R
+                       self.cube_for_resolver[26:51] +   # L
+                       self.cube_for_resolver[101:126] + # B
+                       self.cube_for_resolver[51:76] +   # F
+                       self.cube_for_resolver[126:151])  # D
+        cube_string = ''.join(cube_string)
+
+        cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.solver %s'" % (SERVER, cube_string))
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1]
+        output = output.strip()
+
+        output = output.replace("Uw Uw Uw", "Uw'")
+        output = output.replace("Uw Uw", "Uw2")
+        output = output.replace("U U U", "U'")
+        output = output.replace("U U", "U2")
+
+        output = output.replace("Lw Lw Lw", "Lw'")
+        output = output.replace("Lw Lw", "Lw2")
+        output = output.replace("L L L", "L'")
+        output = output.replace("L L", "L2")
+
+        output = output.replace("Fw Fw Fw", "Fw'")
+        output = output.replace("Fw Fw", "Fw2")
+        output = output.replace("F F F", "F'")
+        output = output.replace("F F", "F2")
+
+        output = output.replace("Rw Rw Rw", "Rw'")
+        output = output.replace("Rw Rw", "Rw2")
+        output = output.replace("R R R", "R'")
+        output = output.replace("R R", "R2")
+
+        output = output.replace("Bw Bw Bw", "Bw'")
+        output = output.replace("Bw Bw", "Bw2")
+        output = output.replace("B B B", "B'")
+        output = output.replace("B B", "B2")
+
+        output = output.replace("Dw Dw Dw", "Dw'")
+        output = output.replace("Dw Dw", "Dw2")
+        output = output.replace("D D D", "D'")
+        output = output.replace("D D", "D2")
+        actions = output.split()
+
+        self.run_actions(actions)
+
+        self.elevate(0)
+
+        if not self.flipper_at_init:
+            self.flip()
 
 
 class CraneCuber6x6x6(CraneCuber3x3x3):
