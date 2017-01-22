@@ -985,6 +985,21 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
             self.flip()
 
 
+class CraneCuber5x5x5(CraneCuber3x3x3):
+
+    def __init__(self, rows_and_cols=5, size_mm=63):
+        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+
+        # These are for a 67mm 5x5x5 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 54
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = -19
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
+        self.rows_in_turntable_to_count_as_face_turn = 3
+
+    def resolve_moves(self):
+        raise Exception("No solver available for 5x5x5")
+
+
 class CraneCuber6x6x6(CraneCuber3x3x3):
 
     def __init__(self, rows_and_cols=6, size_mm=67):
@@ -992,12 +1007,12 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
 
         # These are for a 67mm 6x6x6 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 29
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -42
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 6
 
     def resolve_moves(self):
-        raise Exception("No solver available for 6x6x6x")
+        raise Exception("No solver available for 6x6x6")
 
 
 if __name__ == '__main__':
@@ -1013,10 +1028,10 @@ if __name__ == '__main__':
 
     cc = None
 
-    '''
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
-    cc = CraneCuber4x4x4()
-    cc.run_actions(("U", ))
+    '''
+    cc = CraneCuber5x5x5()
+    cc.run_actions(("U'", ))
     cc.shutdown_robot()
     sys.exit(0)
     '''
@@ -1025,6 +1040,7 @@ if __name__ == '__main__':
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
             cc = CraneCuber3x3x3()
+            cc.wait_for_touch_sensor()
             cc.scan()
             cc.get_colors()
 
@@ -1042,6 +1058,8 @@ if __name__ == '__main__':
                 cc = CraneCuber3x3x3()
             elif size == 4:
                 cc = CraneCuber4x4x4()
+            elif size == 5:
+                cc = CraneCuber5x5x5()
             elif size == 6:
                 cc = CraneCuber6x6x6()
             else:
@@ -1050,7 +1068,6 @@ if __name__ == '__main__':
             cc.colors = colors
             cc.resolve_colors()
             cc.resolve_moves()
-            cc.wait_for_touch_sensor()
 
             if cc.shutdown:
                 break
