@@ -794,7 +794,39 @@ class CraneCuber3x3x3(object):
             (int(self.time_elevate/1000), int(self.time_flip/1000), int(self.time_rotate/1000),
              int(delta_ms/1000), moves, int(delta_ms/moves)))
 
-    def resolve_moves(self):
+    def compress_actions(self, actions):
+        actions = actions.replace("Uw Uw Uw ", "Uw' ")
+        actions = actions.replace("Uw Uw ", "Uw2 ")
+        actions = actions.replace("U U U ", "U' ")
+        actions = actions.replace("U U ", "U2 ")
+
+        actions = actions.replace("Lw Lw Lw ", "Lw' ")
+        actions = actions.replace("Lw Lw ", "Lw2 ")
+        actions = actions.replace("L L L ", "L' ")
+        actions = actions.replace("L L ", "L2 ")
+
+        actions = actions.replace("Fw Fw Fw ", "Fw' ")
+        actions = actions.replace("Fw Fw ", "Fw2 ")
+        actions = actions.replace("F F F ", "F' ")
+        actions = actions.replace("F F ", "F2 ")
+
+        actions = actions.replace("Rw Rw Rw ", "Rw' ")
+        actions = actions.replace("Rw Rw ", "Rw2 ")
+        actions = actions.replace("R R R ", "R' ")
+        actions = actions.replace("R R ", "R2 ")
+
+        actions = actions.replace("Bw Bw Bw ", "Bw' ")
+        actions = actions.replace("Bw Bw ", "Bw2 ")
+        actions = actions.replace("B B B ", "B' ")
+        actions = actions.replace("B B ", "B2 ")
+
+        actions = actions.replace("Dw Dw Dw ", "Dw' ")
+        actions = actions.replace("Dw Dw ", "Dw2 ")
+        actions = actions.replace("D D D ", "D' ")
+        actions = actions.replace("D D ", "D2 ")
+        return actions
+
+    def resolve_actions(self):
 
         if self.shutdown:
             return
@@ -938,7 +970,7 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
         self.rows_in_turntable_to_count_as_face_turn = 2
 
-    def resolve_moves(self):
+    def resolve_actions(self):
 
         if self.shutdown:
             return
@@ -969,7 +1001,7 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 4
 
-    def resolve_moves(self):
+    def resolve_actions(self):
 
         if self.shutdown:
             return
@@ -996,56 +1028,24 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 3
 
-    def resolve_moves(self):
+    def resolve_actions(self):
         # java -cp bin -Xmx4g justsomerandompackagename.solver LLBUULLBUUDUUDDLLLBBLLURRDDUUBDDUUBDDDFFDDFBBDDFBBFLRBBFLRBBBBRDDDDLRRDDLRRFFLFFRRLDDRRLBBRRBRRRRBRRUULUUFFLUUUUFRRBBFFLBBFFLLLLDDLLDFFFFBUUUURFFUURFF
 
         if self.shutdown:
             return
 
-        # solver needs U R L B F D order
-        cube_string = (self.cube_for_resolver[0:26] +    # U
-                       self.cube_for_resolver[76:101] +  # R
-                       self.cube_for_resolver[26:51] +   # L
-                       self.cube_for_resolver[101:126] + # B
-                       self.cube_for_resolver[51:76] +   # F
-                       self.cube_for_resolver[126:151])  # D
+        # The kociemba order from self.cube_for_resolver is U L F R B D but the 5x5x5 solver needs U R L B F D order
+        cube_string = (self.cube_for_resolver[0:25] +    # U
+                       self.cube_for_resolver[75:100] +  # R
+                       self.cube_for_resolver[25:50] +   # L
+                       self.cube_for_resolver[100:125] + # B
+                       self.cube_for_resolver[50:75] +   # F
+                       self.cube_for_resolver[125:150])  # D
         cube_string = ''.join(cube_string)
 
-        cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.solver %s'" % (SERVER, cube_string))
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1]
-        output = output.strip()
-
-        output = output.replace("Uw Uw Uw", "Uw'")
-        output = output.replace("Uw Uw", "Uw2")
-        output = output.replace("U U U", "U'")
-        output = output.replace("U U", "U2")
-
-        output = output.replace("Lw Lw Lw", "Lw'")
-        output = output.replace("Lw Lw", "Lw2")
-        output = output.replace("L L L", "L'")
-        output = output.replace("L L", "L2")
-
-        output = output.replace("Fw Fw Fw", "Fw'")
-        output = output.replace("Fw Fw", "Fw2")
-        output = output.replace("F F F", "F'")
-        output = output.replace("F F", "F2")
-
-        output = output.replace("Rw Rw Rw", "Rw'")
-        output = output.replace("Rw Rw", "Rw2")
-        output = output.replace("R R R", "R'")
-        output = output.replace("R R", "R2")
-
-        output = output.replace("Bw Bw Bw", "Bw'")
-        output = output.replace("Bw Bw", "Bw2")
-        output = output.replace("B B B", "B'")
-        output = output.replace("B B", "B2")
-
-        output = output.replace("Dw Dw Dw", "Dw'")
-        output = output.replace("Dw Dw", "Dw2")
-        output = output.replace("D D D", "D'")
-        output = output.replace("D D", "D2")
-        actions = output.split()
-
+        cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.solver %s'" % (SERVER, cube_string)
+        actions = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1]
+        actions = self.compress_actions(actions).split()
         self.run_actions(actions)
 
         self.elevate(0)
@@ -1065,7 +1065,7 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 6
 
-    def resolve_moves(self):
+    def resolve_actions(self):
         raise Exception("No solver available for 6x6x6")
 
 
@@ -1121,7 +1121,7 @@ if __name__ == '__main__':
 
             cc.colors = colors
             cc.resolve_colors()
-            cc.resolve_moves()
+            cc.resolve_actions()
 
             if cc.shutdown:
                 break
