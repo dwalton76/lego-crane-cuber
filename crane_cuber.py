@@ -22,13 +22,13 @@ import sys
 log = logging.getLogger(__name__)
 
 # http://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id
-SERVER = '192.168.0.4'
+SERVER = '192.168.0.5'
 
 # positive moves to init position
 # negative moves towards camera
 # This should be 90 degrees but some extra is needed to account for play between the gears
-FLIPPER_DEGREES = -120
-FLIPPER_SPEED = 400
+FLIPPER_DEGREES = -123
+FLIPPER_SPEED = 300
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -37,7 +37,7 @@ FLIPPER_SPEED = 400
 # negative moves counter clockwise (viewed from above)
 # positive moves clockwise (viewed from above)
 TURNTABLE_TURN_DEGREES = 210
-TURNTABLE_SPEED = 800
+TURNTABLE_SPEED = 600
 TURNTABLE_FREE_SPEED = 800
 TURN_FREE_TOUCH_DEGREES = 40
 TURN_FREE_SQUARE_TT_DEGREES = -40
@@ -48,6 +48,11 @@ ELEVATOR_SPEED_UP_FAST = 1050
 ELEVATOR_SPEED_UP_SLOW = 1050
 ELEVATOR_SPEED_DOWN_FAST = 1050
 ELEVATOR_SPEED_DOWN_SLOW = 1050
+
+#ELEVATOR_SPEED_UP_FAST = 300
+#ELEVATOR_SPEED_UP_SLOW = 300
+#ELEVATOR_SPEED_DOWN_FAST = 300
+#ELEVATOR_SPEED_DOWN_SLOW = 300
 
 # References
 # ==========
@@ -84,14 +89,13 @@ class CraneCuber3x3x3(object):
         self.time_elevate = 0
         self.time_flip = 0
         self.time_rotate = 0
+        self.flipper_at_init = True
 
         # These numbers are for a 57mm 3x3x3 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 105
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -145
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -145
         self.rows_in_turntable_to_count_as_face_turn = 2
-
-        self.init_motors()
 
     def init_motors(self):
 
@@ -966,8 +970,8 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
         # These are for a 40mm 2x2x2 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
         self.rows_in_turntable_to_count_as_face_turn = 2
 
     def resolve_actions(self):
@@ -1022,9 +1026,10 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
     def __init__(self, rows_and_cols=5, size_mm=63):
         CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
 
-        # These are for a 67mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 54
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = -19
+        # dwalton
+        # These are for a 63mm 5x5x5 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 46
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 3
 
@@ -1084,6 +1089,7 @@ if __name__ == '__main__':
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
+    # dwalton
     cc = CraneCuber5x5x5()
     cc.run_actions(("U'", ))
     cc.shutdown_robot()
@@ -1091,9 +1097,15 @@ if __name__ == '__main__':
     '''
 
     try:
+        first = True
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
             cc = CraneCuber3x3x3()
+
+            if first:
+                cc.init_motors()
+                first = False
+
             cc.wait_for_touch_sensor()
             cc.scan()
             cc.get_colors()
