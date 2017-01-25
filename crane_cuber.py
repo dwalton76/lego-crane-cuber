@@ -1049,7 +1049,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        # The kociemba order from self.cube_for_resolver is U L F R B D but the 5x5x5 solver needs U R L B F D order
+        # The self.cube_for_resolver order is U L F R B D but the 5x5x5 solver needs U R L B F D order
         cube_string = (self.cube_for_resolver[0:25] +    # U
                        self.cube_for_resolver[75:100] +  # R
                        self.cube_for_resolver[25:50] +   # L
