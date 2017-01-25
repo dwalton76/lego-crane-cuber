@@ -1026,7 +1026,6 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
     def __init__(self, rows_and_cols=5, size_mm=63):
         CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
 
-        # dwalton
         # These are for a 63mm 5x5x5 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 46
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
@@ -1048,11 +1047,57 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
                        self.cube_for_resolver[125:150])  # D
         cube_string = ''.join(cube_string)
 
-        cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.solver %s'" % (SERVER, cube_string)
-        actions = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1]
+        cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (SERVER, cube_string)
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()
+        '''
+        The 5x5x5 reducer will produce the following in the very last lines of output:
+
+        All Moves (106 total) - Rw Uw Rw Bw Rw Rw F F Uw Uw Bw Rw Lw Lw Dw Dw B B B Uw Uw Uw Dw L Rw Rw Lw Lw Dw U U U F Rw Rw Uw Uw F F F Dw Dw F F F Uw Uw B B Uw Uw Bw Bw Rw Rw Uw Uw L D D D L D D D F F U Lw Lw D L U U U Bw Bw Lw Lw U Bw Bw U U U F F Fw Fw U U U Rw Rw D Bw Bw U L L F F Bw Bw Rw Rw 
+        U - LUUURDUUUUDUUUUDUUUUDDDDB
+        D - UDDDUBDDDUBDDDUBDDDUBFFFU
+        R - LLLLBLRRRRLRRRRLRRRRFFFFL
+        L - FLLLRRLLLBRLLLBRLLLBRRRRF
+        F - FBBBDUFFFBUFFFBUFFFBLFFFR
+        B - URRRDFBBBDFBBBDFBBBDBLLLD
+        '''
+        found_all_moves = False
+        tmp = {}
+        for line in output:
+            line = line.strip()
+            if line.startswith("All Moves")
+                found_all_moves = True
+                actions = line.split(' - ')[1].strip()
+            elif found_all_moves:
+                if '-' in line:
+                    (side_name, squares) = line.split('-')
+                    side_name = side_name.strip()
+                    squares = squares.strip()
+                    '''
+                    Example:
+                    U - LUUURDUUUUDUUUUDUUUUDDDDB
+
+                    The cube has been reduced to a 3x3x3 so we want the
+                    corners, the middle of each edge and the center square
+
+                    LUUUR
+                    DUUUU
+                    DUUUU
+                    DUUUU
+                    DDDDB
+                    '''
+                    tmp[side_name] = squares[0] + square[2] + square[4] + square[10] + square[12] + square[14] + square[20] + square[22] + square[24]
+
+        # kociemba uses order U, L, F, R, B, D
+        cube_string_for_3x3x3 = tmp['U'] + tmp['L'] + tmp['F'] + tmp['R'] + tmp['B'] + tmp['D']
+
+        output = subprocess.check_output(['ssh',
+                                          'robot@%s' % SERVER,
+                                          '/home/robot/lego-crane-cuber/solvers/3x3x3/kociemba_x86',
+                                          cube_string_for_3x3x3]).decode('ascii')
+        kociemba_actions = output.strip()
+        actions += ' ' + kociemba_actions
         actions = self.compress_actions(actions).split()
         self.run_actions(actions)
-
         self.elevate(0)
 
         if not self.flipper_at_init:
@@ -1089,7 +1134,6 @@ if __name__ == '__main__':
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
-    # dwalton
     cc = CraneCuber5x5x5()
     cc.run_actions(("U'", ))
     cc.shutdown_robot()
