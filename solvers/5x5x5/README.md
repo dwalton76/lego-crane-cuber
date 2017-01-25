@@ -1,7 +1,7 @@
 
 How To Run
 ==========
-java -cp bin -Xmx4g justsomerandompackagename.solver STRING_TO_DESCRIBE_CUBE
+java -cp bin -Xmx4g justsomerandompackagename.reducer STRING_TO_DESCRIBE_CUBE
 
 
 

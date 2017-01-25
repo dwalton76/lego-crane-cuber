@@ -90,6 +90,7 @@ class CraneCuber3x3x3(object):
         self.time_flip = 0
         self.time_rotate = 0
         self.flipper_at_init = True
+        self.prev_rotate_direction = None
 
         # These numbers are for a 57mm 3x3x3 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 105
@@ -127,6 +128,7 @@ class CraneCuber3x3x3(object):
         log.info("Initialize turntable %s" % self.turntable)
         self.turntable.reset()
         self.turntable.stop(stop_action='hold')
+        self.rotate(True, 1)
 
     def shutdown_robot(self):
         log.info('Shutting down')
@@ -201,11 +203,16 @@ class CraneCuber3x3x3(object):
         assert quarter_turns > 0 and quarter_turns <= 2, "quarter_turns is %d, it must be between 0 and 2" % quarter_turns
         current_pos = self.turntable.position
         start = datetime.datetime.now()
+        TT_GEAR_SLIP_DEGREES = 2
 
         # cube will turn freely since none of the rows are being held
         if self.rows_in_turntable == self.rows_and_cols:
             turn_degrees = TURN_FREE_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
             square_turntable_degrees = TURN_FREE_SQUARE_TT_DEGREES
+
+            if self.prev_rotate_direction is not None and self.prev_rotate_direction != clockwise:
+                log.warning("using TT_GEAR_SLIP_DEGREES")
+                turn_degrees += TT_GEAR_SLIP_DEGREES
 
             if not clockwise:
                 turn_degrees *= -1
@@ -221,13 +228,17 @@ class CraneCuber3x3x3(object):
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_rotate += delta_ms
 
-            log.info("rotate_cube() %d quarter turns, clockwise %s, current_pos %d, turn_pos %d, square_turntable_pos %d took %dms" %
-                (quarter_turns, clockwise, current_pos, turn_pos, square_turntable_pos, delta_ms))
+            log.info("rotate_cube() FREE %d quarter turns, clockwise %s (prev %s), current_pos %d, turn_pos %d, square_turntable_pos %d took %dms" %
+                (quarter_turns, clockwise, self.prev_rotate_direction, current_pos, turn_pos, square_turntable_pos, delta_ms))
 
         else:
             turn_degrees = self.TURN_BLOCKED_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
             square_cube_degrees = self.TURN_BLOCKED_SQUARE_CUBE_DEGREES
             square_turntable_degrees = self.TURN_BLOCKED_SQUARE_TT_DEGREES
+
+            if self.prev_rotate_direction is not None and self.prev_rotate_direction != clockwise:
+                log.warning("using TT_GEAR_SLIP_DEGREES")
+                turn_degrees += TT_GEAR_SLIP_DEGREES
 
             if not clockwise:
                 turn_degrees *= -1
@@ -245,8 +256,10 @@ class CraneCuber3x3x3(object):
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_rotate += delta_ms
-            log.info("rotate_cube() %d quarter turns, clockwise %s, current_pos %d, turn_pos %d, square_cube_pos %d, square_turntable_pos %d took %dms" %
-                (quarter_turns, clockwise, current_pos, turn_pos, square_cube_pos, square_turntable_pos, delta_ms))
+            log.info("rotate_cube() BLOCKED %d quarter turns, clockwise %s (prev %s), current_pos %d, turn_pos %d, square_cube_pos %d, square_turntable_pos %d took %dms" %
+                (quarter_turns, clockwise, self.prev_rotate_direction, current_pos, turn_pos, square_cube_pos, square_turntable_pos, delta_ms))
+
+        self.prev_rotate_direction = clockwise
 
         # Only update the facing_XYZ variables if the entire side is turning.  For
         # a 3x3x3 this means the middle square is being turned, this happens if at
@@ -835,10 +848,8 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        output = subprocess.check_output(['ssh',
-                                          'robot@%s' % SERVER,
-                                          '/home/robot/lego-crane-cuber/solvers/3x3x3/kociemba_x86',
-                                          self.cube_for_resolver]).decode('ascii')
+        output = subprocess.check_output('ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, self.cube_for_resolver),
+                                         shell=True).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
 
@@ -1027,7 +1038,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 46
+        self.TURN_BLOCKED_TOUCH_DEGREES = 50
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 3
@@ -1046,6 +1057,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
                        self.cube_for_resolver[50:75] +   # F
                        self.cube_for_resolver[125:150])  # D
         cube_string = ''.join(cube_string)
+        log.info("cube string for 5x5x5 reducer %s" % cube_string)
 
         cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (SERVER, cube_string)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()
@@ -1064,11 +1076,13 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         tmp = {}
         for line in output:
             line = line.strip()
-            if line.startswith("All Moves")
+            if line.startswith("All Moves"):
                 found_all_moves = True
                 actions = line.split(' - ')[1].strip()
+                log.info("5x5x5 -> 3x3x3 reduction moves %s" % actions)
             elif found_all_moves:
                 if '-' in line:
+                    log.info("5x5x5 -> 3x3x3 state: %s" % line)
                     (side_name, squares) = line.split('-')
                     side_name = side_name.strip()
                     squares = squares.strip()
@@ -1085,15 +1099,20 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
                     DUUUU
                     DDDDB
                     '''
-                    tmp[side_name] = squares[0] + square[2] + square[4] + square[10] + square[12] + square[14] + square[20] + square[22] + square[24]
+                    tmp[side_name] = squares[0] + squares[2] + squares[4] + squares[10] + squares[12] + squares[14] + squares[20] + squares[22] + squares[24]
 
-        # kociemba uses order U, L, F, R, B, D
-        cube_string_for_3x3x3 = tmp['U'] + tmp['L'] + tmp['F'] + tmp['R'] + tmp['B'] + tmp['D']
+        # kociemba uses order U R F D L B
+        cube_string_for_3x3x3 = tmp['U'] + tmp['R'] + tmp['F'] + tmp['D'] + tmp['L'] + tmp['B']
+        log.info("tmp U %s" % tmp['U'])
+        log.info("tmp R %s" % tmp['R'])
+        log.info("tmp F %s" % tmp['F'])
+        log.info("tmp D %s" % tmp['D'])
+        log.info("tmp L %s" % tmp['L'])
+        log.info("tmp B %s" % tmp['B'])
+        log.info("cube_string_for_3x3x3 %s" % cube_string_for_3x3x3)
 
-        output = subprocess.check_output(['ssh',
-                                          'robot@%s' % SERVER,
-                                          '/home/robot/lego-crane-cuber/solvers/3x3x3/kociemba_x86',
-                                          cube_string_for_3x3x3]).decode('ascii')
+        output = subprocess.check_output('ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, cube_string_for_3x3x3),
+                                         shell=True).decode('ascii')
         kociemba_actions = output.strip()
         actions += ' ' + kociemba_actions
         actions = self.compress_actions(actions).split()
@@ -1135,7 +1154,13 @@ if __name__ == '__main__':
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
     cc = CraneCuber5x5x5()
+    cc.init_motors()
+
+    cc.run_actions(("U", ))
+    cc.wait_for_touch_sensor()
+
     cc.run_actions(("U'", ))
+
     cc.shutdown_robot()
     sys.exit(0)
     '''
