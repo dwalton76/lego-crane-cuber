@@ -37,7 +37,7 @@ FLIPPER_SPEED = 300
 # negative moves counter clockwise (viewed from above)
 # positive moves clockwise (viewed from above)
 TURNTABLE_TURN_DEGREES = 210
-TURNTABLE_SPEED = 600
+TURNTABLE_SPEED = 1050
 TURNTABLE_FREE_SPEED = 800
 TURN_FREE_TOUCH_DEGREES = 40
 TURN_FREE_SQUARE_TT_DEGREES = -40
@@ -49,10 +49,6 @@ ELEVATOR_SPEED_UP_SLOW = 1050
 ELEVATOR_SPEED_DOWN_FAST = 1050
 ELEVATOR_SPEED_DOWN_SLOW = 1050
 
-#ELEVATOR_SPEED_UP_FAST = 300
-#ELEVATOR_SPEED_UP_SLOW = 300
-#ELEVATOR_SPEED_DOWN_FAST = 300
-#ELEVATOR_SPEED_DOWN_SLOW = 300
 
 # References
 # ==========
@@ -144,7 +140,6 @@ class CraneCuber3x3x3(object):
         log.info("Initialize turntable %s" % self.turntable)
         self.turntable.reset()
         self.turntable.stop(stop_action='hold')
-        self.rotate(True, 1)
 
     def shutdown_robot(self):
         log.info('Shutting down')
@@ -866,7 +861,7 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        output = subprocess.check_output('ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, self.cube_for_resolver),
+        output = subprocess.check_output('ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, self.cube_for_resolver.strip()),
                                          shell=True).decode('ascii')
         actions = output.strip().split()
         self.run_actions(actions)
@@ -1196,6 +1191,9 @@ if __name__ == '__main__':
             cc.wait_for_touch_sensor()
             cc.scan()
             cc.get_colors()
+
+            if cc.shutdown:
+                break
 
             # We have scanned all sides and know how many squares there are, use
             # this to create an object of the appropriate class
