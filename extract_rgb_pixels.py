@@ -390,9 +390,8 @@ def draw_cube(image, candidates, desc):
 
         for (index, area, contour, approx, cX, cY) in candidates:
             if is_square(cX, cY, area, approx, median_square_area):
-                # dwalton flip the comments here
-                #to_draw_square.append(contour)
-                to_draw_approx.append(approx)
+                to_draw_square.append(contour)
+                # to_draw_approx.append(approx)
             else:
                 to_draw.append(contour)
                 to_draw_approx.append(approx)
