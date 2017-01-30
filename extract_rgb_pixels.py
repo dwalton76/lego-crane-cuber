@@ -50,25 +50,21 @@ def is_square(cX, cY, contour_area, approx, target_bounding_area=None, strict=Fa
         (x, y, w, h) = cv2.boundingRect(approx)
         aspect_ratio = w / float(h)
         bounding_area = float(w * h)
+        contour_area_vs_bounding_area_ratio = float(contour_area / bounding_area)
 
         if strict:
             aspect_ratio_min = 0.70
             aspect_ratio_max = 1.30
 
-            contour_area_vs_bounding_area_ratio = float(contour_area / bounding_area)
-
-            if contour_area_vs_bounding_area_ratio < 0.80:
+            if contour_area_vs_bounding_area_ratio < 0.87:
                 if (cX, cY) not in square_vs_non_square_debug_printed:
-                    log.info("NOT SQUARE: (%d, %d) contour_area_vs_bounding_area_ratio %s is less than 0.80" % (cX, cY, contour_area_vs_bounding_area_ratio))
+                    log.info("NOT SQUARE: (%d, %d) strict %s, contour_area_vs_bounding_area_ratio %s is less than 0.87" % (cX, cY, strict, contour_area_vs_bounding_area_ratio))
                     square_vs_non_square_debug_printed.append((cX, cY))
                 return False
 
         else:
             aspect_ratio_min = 0.40
             aspect_ratio_max = 1.60
-
-        # disable this for now
-        # aspect_ratio = 1
 
         # a square will have an aspect ratio that is approximately
         # equal to one, otherwise, the shape is a rectangle
@@ -79,24 +75,28 @@ def is_square(cX, cY, contour_area, approx, target_bounding_area=None, strict=Fa
 
                 if bounding_area_ratio >= 0.55 and bounding_area_ratio <= 1.35:
                     if (cX, cY) not in square_vs_non_square_debug_printed:
-                        log.info("SQUARE: (%d, %d) aspect_ratio %s, bounding_area_ratio %s" % (cX, cY, aspect_ratio, bounding_area_ratio))
+                        log.info("SQUARE: (%d, %d) strict %s, aspect_ratio %s, bounding_area_ratio %s, contour_area_vs_bounding_area_ratio %s" % (cX, cY, strict, aspect_ratio, bounding_area_ratio, contour_area_vs_bounding_area_ratio))
                         square_vs_non_square_debug_printed.append((cX, cY))
                     return True
                 else:
                     if (cX, cY) not in square_vs_non_square_debug_printed:
-                        log.info("NOT SQUARE: (%d, %d) bounding_area %s, target_bounding_area %s, bounding_area_ratio %s" % (cX, cY, bounding_area, target_bounding_area, bounding_area_ratio))
+                        log.info("NOT SQUARE: (%d, %d) strict %s, bounding_area %s, target_bounding_area %s, bounding_area_ratio %s" % (cX, cY, strict, bounding_area, target_bounding_area, bounding_area_ratio))
                         square_vs_non_square_debug_printed.append((cX, cY))
                     return False
             else:
                 if (cX, cY) not in square_vs_non_square_debug_printed:
-                    log.info("SQUARE: (%d, %d) aspect_ratio %s, no target area" % (cX, cY, aspect_ratio))
+                    log.info("SQUARE: (%d, %d) strict %s, aspect_ratio %s, no target area, contour_area_vs_bounding_area_ratio %s" % (cX, cY, strict, aspect_ratio, contour_area_vs_bounding_area_ratio))
                     square_vs_non_square_debug_printed.append((cX, cY))
                 return True
         else:
             if (cX, cY) not in square_vs_non_square_debug_printed:
-                log.info("NOT SQUARE: (%d, %d) aspect_ratio %s" % (cX, cY, aspect_ratio))
+                log.info("NOT SQUARE: (%d, %d) strict %s, aspect_ratio %s" % (cX, cY, strict, aspect_ratio))
                 square_vs_non_square_debug_printed.append((cX, cY))
+                return False
 
+    #if (cX, cY) not in square_vs_non_square_debug_printed:
+    #    log.info("NOT SQUARE: (%d, %d) strict %s, len approx %d" % (cX, cY, strict, len(approx)))
+    #    square_vs_non_square_debug_printed.append((cX, cY))
     return False
 
 
