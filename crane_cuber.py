@@ -63,6 +63,22 @@ ELEVATOR_SPEED_DOWN_SLOW = 1050
 # https://jbt.github.io/markdown-editor/
 
 
+def round_to_quarter_turn(target_degrees):
+    """
+    round target_degrees up/down so that it is a multiple of TURNTABLE_TURN_DEGREES
+    """
+    a = int(target_degrees/TURNTABLE_TURN_DEGREES)
+
+    if target_degrees % TURNTABLE_TURN_DEGREES == 0:
+        log.info("round_to_quarter_turn %d is already a multiple of %d" % (target_degrees, TURNTABLE_TURN_DEGREES))
+        return target_degrees
+
+    log.info("round_to_quarter_turn %d/%d is %s" % (target_degrees, TURNTABLE_TURN_DEGREES, float(target_degrees/TURNTABLE_TURN_DEGREES)))
+    result = int(round(float(target_degrees/TURNTABLE_TURN_DEGREES)) * TURNTABLE_TURN_DEGREES)
+    log.info("round_to_quarter_turn result is %s" % result)
+    return result
+
+
 class CraneCuber3x3x3(object):
 
     def __init__(self, rows_and_cols=3, size_mm=57):
@@ -90,7 +106,7 @@ class CraneCuber3x3x3(object):
         self.time_flip = 0
         self.time_rotate = 0
         self.flipper_at_init = True
-        self.prev_rotate_direction = None
+        self.colors = {}
 
         # These numbers are for a 57mm 3x3x3 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 105
@@ -165,7 +181,7 @@ class CraneCuber3x3x3(object):
 
             sleep(0.01)
 
-    def _rotate(self, final_pos, accurate=False):
+    def _rotate(self, final_pos):
 
         if self.rows_in_turntable == self.rows_and_cols:
             speed = TURNTABLE_FREE_SPEED
@@ -181,18 +197,17 @@ class CraneCuber3x3x3(object):
 
         # uncomment this if you want to test with 100% accurate rotate position
         '''
-        if accurate:
-            prev_pos = None
+        prev_pos = None
 
-            while self.turntable.position != final_pos:
-                log.info("turntable() position is %d, it should be %d" % (self.turntable.position, final_pos))
-                self.turntable.run_to_abs_pos(position_sp=final_pos,
-                                             speed_sp=200)
-                self.turntable.wait_while('running', timeout=100)
+        while self.turntable.position != final_pos:
+            log.info("turntable() position is %d, it should be %d" % (self.turntable.position, final_pos))
+            self.turntable.run_to_abs_pos(position_sp=final_pos,
+                                         speed_sp=200)
+            self.turntable.wait_while('running', timeout=100)
 
-                if prev_pos is not None and self.turntable.position == prev_pos:
-                    break
-                prev_pos = self.turntable.position
+            if prev_pos is not None and self.turntable.position == prev_pos:
+                break
+            prev_pos = self.turntable.position
         '''
 
     def rotate(self, clockwise, quarter_turns):
@@ -210,35 +225,27 @@ class CraneCuber3x3x3(object):
             turn_degrees = TURN_FREE_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
             square_turntable_degrees = TURN_FREE_SQUARE_TT_DEGREES
 
-            if self.prev_rotate_direction is not None and self.prev_rotate_direction != clockwise:
-                log.warning("using TT_GEAR_SLIP_DEGREES")
-                turn_degrees += TT_GEAR_SLIP_DEGREES
-
             if not clockwise:
                 turn_degrees *= -1
                 square_turntable_degrees *= -1
 
             turn_pos = current_pos + turn_degrees
-            square_turntable_pos = turn_pos + square_turntable_degrees
+            square_turntable_pos = round_to_quarter_turn(turn_pos + square_turntable_degrees)
 
-            self._rotate(turn_pos, True)
+            self._rotate(turn_pos)
             self._rotate(square_turntable_pos)
 
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_rotate += delta_ms
 
-            log.info("rotate_cube() FREE %d quarter turns, clockwise %s (prev %s), current_pos %d, turn_pos %d, square_turntable_pos %d took %dms" %
-                (quarter_turns, clockwise, self.prev_rotate_direction, current_pos, turn_pos, square_turntable_pos, delta_ms))
+            log.info("rotate_cube() FREE %d quarter turns, clockwise %s), current_pos %d, turn_pos %d, square_turntable_pos %d took %dms" %
+                (quarter_turns, clockwise, current_pos, turn_pos, square_turntable_pos, delta_ms))
 
         else:
             turn_degrees = self.TURN_BLOCKED_TOUCH_DEGREES + (TURNTABLE_TURN_DEGREES * quarter_turns)
             square_cube_degrees = self.TURN_BLOCKED_SQUARE_CUBE_DEGREES
             square_turntable_degrees = self.TURN_BLOCKED_SQUARE_TT_DEGREES
-
-            if self.prev_rotate_direction is not None and self.prev_rotate_direction != clockwise:
-                log.warning("using TT_GEAR_SLIP_DEGREES")
-                turn_degrees += TT_GEAR_SLIP_DEGREES
 
             if not clockwise:
                 turn_degrees *= -1
@@ -247,7 +254,7 @@ class CraneCuber3x3x3(object):
 
             turn_pos = current_pos + turn_degrees
             square_cube_pos = turn_pos + square_cube_degrees
-            square_turntable_pos = square_cube_pos + square_turntable_degrees
+            square_turntable_pos = round_to_quarter_turn(square_cube_pos + square_turntable_degrees)
 
             self._rotate(turn_pos)
             self._rotate(square_cube_pos)
@@ -256,10 +263,8 @@ class CraneCuber3x3x3(object):
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_rotate += delta_ms
-            log.info("rotate_cube() BLOCKED %d quarter turns, clockwise %s (prev %s), current_pos %d, turn_pos %d, square_cube_pos %d, square_turntable_pos %d took %dms" %
-                (quarter_turns, clockwise, self.prev_rotate_direction, current_pos, turn_pos, square_cube_pos, square_turntable_pos, delta_ms))
-
-        self.prev_rotate_direction = clockwise
+            log.info("rotate_cube() BLOCKED %d quarter turns, clockwise %s, current_pos %d, turn_pos %d, square_cube_pos %d, square_turntable_pos %d took %dms" %
+                (quarter_turns, clockwise, current_pos, turn_pos, square_cube_pos, square_turntable_pos, delta_ms))
 
         # Only update the facing_XYZ variables if the entire side is turning.  For
         # a 3x3x3 this means the middle square is being turned, this happens if at
@@ -350,6 +355,10 @@ class CraneCuber3x3x3(object):
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
         self.time_flip += delta_ms
         log.info("flip() to final_pos %s took %dms" % (final_pos, delta_ms))
+
+        if final_pos == 0 and self.flipper.position != final_pos:
+            self.flipper.reset()
+            self.flipper.stop(stop_action='hold')
 
         # uncomment this if you want to test with 100% accurate flip position
         '''
@@ -485,6 +494,10 @@ class CraneCuber3x3x3(object):
         log.info("elevate() from %d to %d took %dms" % (self.rows_in_turntable, rows, delta_ms))
         self.rows_in_turntable = rows
 
+        if final_pos == 0 and self.elevator.position != final_pos:
+            self.elevator.reset()
+            self.elevator.stop(stop_action='hold')
+
         # uncomment this if you want to test with 100% accurate elevate position
         '''
         if final_pos:
@@ -506,6 +519,10 @@ class CraneCuber3x3x3(object):
         self.elevate(self.rows_and_cols)
 
     def scan_face(self, name):
+
+        if self.shutdown:
+            return
+
         log.info("scan_face() %s" % name)
         png_filename = '/tmp/rubiks-side-%s.png' % name
 
@@ -531,6 +548,10 @@ class CraneCuber3x3x3(object):
             return
 
     def scan(self):
+
+        if self.shutdown:
+            return
+
         log.info("scan()")
         self.colors = {}
         self.scan_face('F')
@@ -577,9 +598,6 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(0)
         self.flip_settle_cube()
-
-        if self.shutdown:
-            return
 
     def get_colors(self):
 
