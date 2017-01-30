@@ -717,7 +717,11 @@ if __name__ == '__main__':
         write_header(fh, size)
 
         # Uncomment to display a cube containing the raw RGB values extracted from the scans
-        # write_cube(fh, raw, size)
+        write_cube(fh, raw, size)
+
+        # Uncomment to exit after displaying the initial cube
+        write_footer(fh)
+        sys.exit(0)
 
         # Build dict where the RGB values are the RGB colors of the square's finalSide
         cube = {}

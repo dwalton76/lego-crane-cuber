@@ -37,24 +37,32 @@ debug = False
 median_square_area = None
 square_vs_non_square_debug_printed = []
 
-def is_square(cX, cY, approx, target_area=None, strict=False):
+def is_square(cX, cY, contour_area, approx, target_bounding_area=None, strict=False):
     """
     A few rules for a rubiks cube square
     - it has to have four sides
     - it must not be rotated (ie not a diamond)
     - (optional) it must be roughly the same size all of the other squares
     """
-    # disable this for now
-    # target_area = None
     global square_vs_non_square_debug_printed
 
     if (strict and len(approx) == 4) or (not strict and len(approx) >= 4):
         (x, y, w, h) = cv2.boundingRect(approx)
         aspect_ratio = w / float(h)
+        bounding_area = float(w * h)
 
         if strict:
             aspect_ratio_min = 0.70
             aspect_ratio_max = 1.30
+
+            contour_area_vs_bounding_area_ratio = float(contour_area / bounding_area)
+
+            if contour_area_vs_bounding_area_ratio < 0.80:
+                if (cX, cY) not in square_vs_non_square_debug_printed:
+                    log.info("NOT SQUARE: (%d, %d) contour_area_vs_bounding_area_ratio %s is less than 0.80" % (cX, cY, contour_area_vs_bounding_area_ratio))
+                    square_vs_non_square_debug_printed.append((cX, cY))
+                return False
+
         else:
             aspect_ratio_min = 0.40
             aspect_ratio_max = 1.60
@@ -66,19 +74,19 @@ def is_square(cX, cY, approx, target_area=None, strict=False):
         # equal to one, otherwise, the shape is a rectangle
         if aspect_ratio >= aspect_ratio_min and aspect_ratio <= aspect_ratio_max:
 
-            if target_area:
-                area = float(w * h)
-                area_ratio = float(target_area / area)
+            if target_bounding_area:
+                bounding_area_ratio = float(target_bounding_area / bounding_area)
 
-                if area_ratio >= 0.55 and area_ratio <= 1.35:
+                if bounding_area_ratio >= 0.55 and bounding_area_ratio <= 1.35:
                     if (cX, cY) not in square_vs_non_square_debug_printed:
-                        log.info("SQUARE: (%d, %d) aspect_ratio %s, area_ratio %s" % (cX, cY, aspect_ratio, area_ratio))
+                        log.info("SQUARE: (%d, %d) aspect_ratio %s, bounding_area_ratio %s" % (cX, cY, aspect_ratio, bounding_area_ratio))
                         square_vs_non_square_debug_printed.append((cX, cY))
                     return True
                 else:
                     if (cX, cY) not in square_vs_non_square_debug_printed:
-                        log.info("NOT SQUARE: (%d, %d) area %s, target_area %s, area_ratio %s" % (cX, cY, area, target_area, area_ratio))
+                        log.info("NOT SQUARE: (%d, %d) bounding_area %s, target_bounding_area %s, bounding_area_ratio %s" % (cX, cY, bounding_area, target_bounding_area, bounding_area_ratio))
                         square_vs_non_square_debug_printed.append((cX, cY))
+                    return False
             else:
                 if (cX, cY) not in square_vs_non_square_debug_printed:
                     log.info("SQUARE: (%d, %d) aspect_ratio %s, no target area" % (cX, cY, aspect_ratio))
@@ -130,7 +138,7 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         if x_delta <= width_wiggle:
             col_neighbors += 1
 
-            if is_square(cX, cY, approx, median_square_area):
+            if is_square(cX, cY, area, approx, median_square_area):
                 col_square_neighbors += 1
                 log.debug("(%d, %d) is a square col neighbor" % (cX, cY))
             else:
@@ -141,7 +149,7 @@ def get_candidate_neighbors(target_tuple, candidates, img_width, img_height):
         if y_delta <= height_wiggle:
             row_neighbors += 1
 
-            if is_square(cX, cY, approx, median_square_area):
+            if is_square(cX, cY, area, approx, median_square_area):
                 row_square_neighbors += 1
                 log.debug("(%d, %d) is a square row neighbor" % (cX, cY))
             else:
@@ -239,7 +247,7 @@ def remove_rogue_non_squares(size, candidates, img_width, img_height):
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
-        if not is_square(cX, cY, approx, median_square_area):
+        if not is_square(cX, cY, area, approx, median_square_area):
             (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
                 get_candidate_neighbors(x, candidates, img_width, img_height)
 
@@ -309,7 +317,7 @@ def get_cube_size(candidates, img_width, img_height):
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
-        if is_square(cX, cY, approx, strict=True):
+        if is_square(cX, cY, area, approx, strict=True):
             square_areas.append(int(area))
 
     global square_vs_non_square_debug_printed
@@ -336,7 +344,7 @@ def get_cube_size(candidates, img_width, img_height):
     for x in candidates:
         (index, area, currentContour, approx, cX, cY) = x
 
-        if is_square(cX, cY, approx, median_square_area, strict=True):
+        if is_square(cX, cY, area, approx, median_square_area, strict=True):
             (row_neighbors, row_square_neighbors, col_neighbors, col_square_neighbors) =\
                 get_candidate_neighbors(x, candidates, img_width, img_height)
             row_size = row_square_neighbors + 1
@@ -381,8 +389,10 @@ def draw_cube(image, candidates, desc):
         to_draw_approx = []
 
         for (index, area, contour, approx, cX, cY) in candidates:
-            if is_square(cX, cY, approx, median_square_area):
-                to_draw_square.append(contour)
+            if is_square(cX, cY, area, approx, median_square_area):
+                # dwalton flip the comments here
+                #to_draw_square.append(contour)
+                to_draw_approx.append(approx)
             else:
                 to_draw.append(contour)
                 to_draw_approx.append(approx)
