@@ -6,7 +6,7 @@ A Rubiks cube solving robot made from EV3 + 42009
 """
 
 from copy import deepcopy
-from ev3dev.ev3 import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor, Leds
+from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
 from math import pi
 from pprint import pformat
 from time import sleep
@@ -78,8 +78,6 @@ def round_to_quarter_turn(target_degrees):
 class CraneCuber3x3x3(object):
 
     def __init__(self, rows_and_cols=3, size_mm=57):
-        Leds.set_color(Leds.LEFT, Leds.AMBER)
-        Leds.set_color(Leds.RIGHT, Leds.AMBER)
         self.shutdown = False
         self.rows_and_cols = rows_and_cols
         self.size_mm = size_mm
@@ -602,12 +600,10 @@ class CraneCuber3x3x3(object):
         cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % SERVER
         log.info(cmd)
         subprocess.call(cmd, shell=True)
+        cmd = 'ssh robot@%s /home/robot/lego-crane-cuber/extract_rgb_pixels.py' % SERVER
 
-        cmd = ['ssh',
-               'robot@%s' % SERVER,
-               '/home/robot/lego-crane-cuber/extract_rgb_pixels.py']
-        log.info(' '.join(cmd))
-        output = subprocess.check_output(cmd).decode('ascii')
+        log.info(cmd)
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
         self.colors = json.loads(output)
 
     def resolve_colors(self):
@@ -617,10 +613,15 @@ class CraneCuber3x3x3(object):
 
         log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
         # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
-        self.cube_for_resolver = subprocess.check_output(['ssh',
-                                                          'robot@%s' % SERVER,
-                                                          '/home/robot/rubiks-color-resolver/resolver.py',
-                                                          "'%s'" % json.dumps(self.colors)]).decode('ascii')
+
+        cmd = ['ssh',
+               'robot@%s' % SERVER,
+               '/home/robot/rubiks-color-resolver/resolver.py',
+               "'%s'" % json.dumps(self.colors)]
+
+        log.info(' '.join(cmd))
+        self.cube_for_resolver = subprocess.check_output(cmd).decode('ascii').strip()
+
         log.info("Final Colors: %s" % self.cube_for_resolver)
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
                     (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
@@ -861,9 +862,10 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        output = subprocess.check_output('ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, self.cube_for_resolver.strip()),
-                                         shell=True).decode('ascii')
-        actions = output.strip().split()
+        cmd = 'ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, self.cube_for_resolver)
+        log.info(cmd)
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+        actions = output.split()
         self.run_actions(actions)
 
         self.elevate(0)
@@ -1003,10 +1005,10 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        output = subprocess.check_output(['ssh',
-                                          'robot@%s' % SERVER,
-                                          '/home/robot/lego-crane-cuber/solvers/2x2x2/rubiks_2x2x2_solver.py',
-                                          ''.join(self.cube_for_resolver)]).decode('ascii')
+        cmd = 'ssh robot@%s /home/robot/lego-crane-cuber/solvers/2x2x2/rubiks_2x2x2_solver.py "%s"' % (SERVER, ''.join(self.cube_for_resolver))
+        log.info(cmd)
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+
         if output != 'Cube is already solved':
             actions = output.strip().split()
             self.run_actions(actions)
@@ -1035,8 +1037,10 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
             return
 
         cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (SERVER, ''.join(self.cube_for_resolver))
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1]
-        actions = output.strip().split()
+        log.info(cmd)
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1].strip()
+
+        actions = output.split()
         self.run_actions(actions)
 
         self.elevate(0)
@@ -1073,11 +1077,12 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         log.info("cube string for 5x5x5 reducer %s" % cube_string)
 
         cmd = "ssh robot@%s 'cd /home/robot/lego-crane-cuber/solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (SERVER, cube_string)
+        log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()
         '''
         The 5x5x5 reducer will produce the following in the very last lines of output:
 
-        All Moves (106 total) - Rw Uw Rw Bw Rw Rw F F Uw Uw Bw Rw Lw Lw Dw Dw B B B Uw Uw Uw Dw L Rw Rw Lw Lw Dw U U U F Rw Rw Uw Uw F F F Dw Dw F F F Uw Uw B B Uw Uw Bw Bw Rw Rw Uw Uw L D D D L D D D F F U Lw Lw D L U U U Bw Bw Lw Lw U Bw Bw U U U F F Fw Fw U U U Rw Rw D Bw Bw U L L F F Bw Bw Rw Rw 
+        All Moves (106 total) - Rw Uw Rw Bw Rw Rw F F Uw Uw Bw Rw Lw Lw Dw Dw B B B Uw Uw Uw Dw L Rw Rw Lw Lw Dw U U U F Rw Rw Uw Uw F F F Dw Dw F F F Uw Uw B B Uw Uw Bw Bw Rw Rw Uw Uw L D D D L D D D F F U Lw Lw D L U U U Bw Bw Lw Lw U Bw Bw U U U F F Fw Fw U U U Rw Rw D Bw Bw U L L F F Bw Bw Rw Rw
         U - LUUURDUUUUDUUUUDUUUUDDDDB
         D - UDDDUBDDDUBDDDUBDDDUBFFFU
         R - LLLLBLRRRRLRRRRLRRRRFFFFL
@@ -1124,8 +1129,10 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         log.info("tmp B %s" % tmp['B'])
         log.info("cube_string_for_3x3x3 %s" % cube_string_for_3x3x3)
 
-        output = subprocess.check_output('ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, cube_string_for_3x3x3),
-                                         shell=True).decode('ascii')
+        cmd = 'ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, cube_string_for_3x3x3)
+        log.info(cmd)
+        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+
         kociemba_actions = output.strip()
         actions += ' ' + kociemba_actions
         actions = self.compress_actions(actions).split()
@@ -1224,17 +1231,11 @@ if __name__ == '__main__':
                 break
 
         cc.shutdown_robot()
-        Leds.set_color(Leds.LEFT, Leds.GREEN)
-        Leds.set_color(Leds.RIGHT, Leds.GREEN)
 
     except Exception as e:
-        Leds.set_color(Leds.LEFT, Leds.RED)
-        Leds.set_color(Leds.RIGHT, Leds.RED)
         log.exception(e)
 
         if cc:
             cc.shutdown_robot()
 
-        Leds.set_color(Leds.LEFT, Leds.GREEN)
-        Leds.set_color(Leds.RIGHT, Leds.GREEN)
         sys.exit(1)

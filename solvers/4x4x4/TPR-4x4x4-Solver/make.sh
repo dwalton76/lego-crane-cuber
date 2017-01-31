@@ -1,3 +1,4 @@
+#!/bin/bash
 rm -rf cs 
 javac -d . -cp twophase.jar src/*.java
 cp src/*.java cs/threephase/
