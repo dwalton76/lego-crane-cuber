@@ -1,13 +1,14 @@
+#!/usr/bin/env python2
 
+import re
+import select
 import socket
+import subprocess
 import struct
 import sys
 from httplib import HTTPResponse
 from BaseHTTPServer import BaseHTTPRequestHandler
 from StringIO import StringIO
-
-import gtk
-import gobject
 
 LIB_ID = 'my_library'
 MCAST_GRP = '239.255.255.250'
@@ -51,10 +52,29 @@ class Response(HTTPResponse):
         self.begin()
 
 
-def interface_addresses(family=socket.AF_INET):
-    for fam, _, _, _, sockaddr in socket.getaddrinfo('', None):
-        if family == fam:
-            yield sockaddr[0]
+def interface_addresses():
+    """
+    Return a list of all IPv4 addresses (ignore 127.0.0.1)
+    """
+
+    '''
+    1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever
+    1: lo    inet6 ::1/128 scope host \       valid_lft forever prefer
+    3: wlan2    inet 192.168.0.27/24 brd 192.168.0.255 scope global wlan2
+    3: wlan2    inet6 2606:a000:4547:3100:20f:55ff:febc:1266/64 scope gl
+    3: wlan2    inet6 fe80::20f:55ff:febc:1266/64 scope link \       va
+    '''
+    result = []
+
+    for line in subprocess.check_output(['ip', '-o', 'addr', 'show']).decode('ascii').splitlines():
+        re_line = re.search('^\d+: \S+\s+inet (\d+\.\d+\.\d+\.\d+)\/\d+', line)
+
+        if re_line:
+            ip = str(re_line.group(1))
+            if ip != '127.0.0.1':
+                result.append(ip)
+
+    return result
 
 
 def client(timeout=1, retries=5):
@@ -79,7 +99,7 @@ def client(timeout=1, retries=5):
                 pass
             else:
                 response = Response(data)
-                print response.getheader('Location')
+                print(response.getheader('Location'))
                 return
 
 
@@ -95,30 +115,26 @@ def server(timeout=5):
     mreq = struct.pack('4sl', socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
 
-    cond = gobject.IO_IN | gobject.IO_HUP
-    gobject.io_add_watch(sock, cond, handle_requests)
+    while True:
 
-    gtk.main()
+        # Wait for data for 1 sec.  We stop after 1s in case we RXed a SIGTERM
+        (readable, writeable, exceptional) = select.select([sock], [], [], 1)
 
+        for s in readable:
+            (data, addr) = sock.recvfrom(4096)
 
-def handle_requests(sock, _):
+            request = Request(data)
+            if not request.error_code and \
+                    request.command == 'M-SEARCH' and \
+                    request.path == '*' and \
+                    request.headers['ST'].startswith(LIB_ID) and \
+                    request.headers['MAN'] == '"ssdp:discover"':
 
-    data, addr = sock.recvfrom(4096)
-    request = Request(data)
-    if not request.error_code and \
-            request.command == 'M-SEARCH' and \
-            request.path == '*' and \
-            request.headers['ST'].startswith(LIB_ID) and \
-            request.headers['MAN'] == '"ssdp:discover"':
-
-        service = request.headers['ST'].split(':', 2)[1]
-        if service in SERVICE_LOCS:
-            loc = SERVICE_LOCS[service]
-            msg = LOCATION_MSG % dict(service=service, loc=loc, library=LIB_ID)
-            sock.sendto(msg, addr)
-
-    return True
-
+                service = request.headers['ST'].split(':', 2)[1]
+                if service in SERVICE_LOCS:
+                    loc = SERVICE_LOCS[service]
+                    msg = LOCATION_MSG % dict(service=service, loc=loc, library=LIB_ID)
+                    sock.sendto(msg, addr)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1 and 'client' in sys.argv[1]:
