@@ -57,4 +57,4 @@ def discover(service, timeout=5, retries=1, mx=3):
 
 if __name__ == '__main__':
     # Example:
-    ssdp.discover("roku:ecp")
+    discover("roku:ecp")
