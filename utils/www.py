@@ -203,6 +203,7 @@ def build_2d_list(squares_list):
 
 
 def get_face_min_max_squares(cube, face):
+
     if face == 'U':
         face_number = 0
     elif face == 'L':
@@ -220,7 +221,8 @@ def get_face_min_max_squares(cube, face):
     size = int(math.sqrt(squares_per_side))
     min_square = int((face_number * squares_per_side ) + 1)
     max_square = int(min_square + squares_per_side - 1)
-    # log.info("side %s, size %d, squares_per_side %d, min/max square %d/%d" % (face, size, squares_per_side, min_square, max_square))
+    # log.info("side %s, size %d, squares_per_side %d, min/max square %d/%d" %
+    #          (face, size, squares_per_side, min_square, max_square))
 
     return (min_square, max_square)
 
