@@ -62,7 +62,7 @@ div#down {
 """ % (size-1,
        size,
        (size - 1) * square_size,
-       (size * square_size) + ((size - 1) * side_margin)))
+       (size * square_size) + (size * side_margin)))
 
     fh.write("""
 div.square {
@@ -718,12 +718,10 @@ if __name__ == '__main__':
     with open('foo.html', 'w') as fh:
         write_header(fh, size)
 
-        # Uncomment to display a cube containing the raw RGB values extracted from the scans
+        fh.write("<h1>Initial RGB values</h1>\n")
         write_cube(fh, raw, size)
-
-        # Uncomment to exit after displaying the initial cube
-        write_footer(fh)
-        sys.exit(0)
+        #write_footer(fh)
+        #sys.exit(0)
 
         # Build dict where the RGB values are the RGB colors of the square's finalSide
         cube = {}
@@ -737,8 +735,12 @@ if __name__ == '__main__':
         cube = convert_key_strings_to_int(cube)
 
         # Display the initial cube
-        fh.write("<h1>Initial Cube</h1>\n")
+        fh.write("<h1>RGB values mapped to 6 colors</h1>\n")
         write_cube(fh, cube, size)
+
+        # Uncomment to exit after displaying the initial cube
+        write_footer(fh)
+        sys.exit(0)
 
         # Practice rotating and print the results
         # https://ruwix.com/online-puzzle-simulators/4x4x4-rubiks-revenge-cube-simulator.php
