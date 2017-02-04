@@ -1175,10 +1175,23 @@ if __name__ == '__main__':
         with open(server_conf, 'r') as fh:
             for line in fh.readlines():
                 line = line.strip()
-                if line:
+                if line and not line.startswith('#'):
                     SERVER = line
+                    break
+
+        if SERVER is None:
+            print("ERROR: The server.conf does not contain a server")
+            sys.exit(1)
     else:
         print("ERROR: The server.conf does not exist...see README for instructions")
+        sys.exit(1)
+
+    log.info("Verify we can ssh to %s without a password" % SERVER)
+    cmd = 'ssh robot@%s ls /tmp' % SERVER
+    try:
+        subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('ascii').strip()
+    except Exception as e:
+        print("ERROR: '%s' failed due to %s, cannot ssh to server" % (cmd, e))
         sys.exit(1)
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
