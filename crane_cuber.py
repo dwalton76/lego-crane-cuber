@@ -21,8 +21,7 @@ import sys
 
 log = logging.getLogger(__name__)
 
-# http://www.thegeekstuff.com/2008/11/3-steps-to-perform-ssh-login-without-password-using-ssh-keygen-ssh-copy-id
-SERVER = '192.168.0.5'
+SERVER = None
 
 # positive moves to init position
 # negative moves towards camera
@@ -600,7 +599,7 @@ class CraneCuber3x3x3(object):
         cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % SERVER
         log.info(cmd)
         subprocess.call(cmd, shell=True)
-        cmd = 'ssh robot@%s /home/robot/lego-crane-cuber/extract_rgb_pixels.py' % SERVER
+        cmd = 'ssh robot@%s rubiks-square-extractor.py' % SERVER
 
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
@@ -616,7 +615,7 @@ class CraneCuber3x3x3(object):
 
         cmd = ['ssh',
                'robot@%s' % SERVER,
-               '/home/robot/rubiks-color-resolver/resolver.py',
+               'rubiks-color-resolver.py',
                "'%s'" % json.dumps(self.colors)]
 
         log.info(' '.join(cmd))
@@ -862,7 +861,7 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        cmd = 'ssh robot@%s "cd /home/robot/lego-crane-cuber/solvers/3x3x3/ && ./kociemba_x86 %s"' % (SERVER, self.cube_for_resolver)
+        cmd = 'ssh robot@%s "kociemba %s"' % (SERVER, self.cube_for_resolver)
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
         actions = output.split()
@@ -1170,6 +1169,17 @@ if __name__ == '__main__':
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
     cc = None
+
+    server_conf = "server.conf"
+    if os.path.exists(server_conf):
+        with open(server_conf, 'r') as fh:
+            for line in fh.readlines():
+                line = line.strip()
+                if line:
+                    SERVER = line
+    else:
+        print("ERROR: The server.conf does not exist...see README for instructions")
+        sys.exit(1)
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
