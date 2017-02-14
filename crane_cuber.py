@@ -606,7 +606,7 @@ class CraneCuber3x3x3(object):
         cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % SERVER
         log.info(cmd)
         subprocess.call(cmd, shell=True)
-        cmd = 'ssh robot@%s rubiks-square-extractor.py' % SERVER
+        cmd = 'ssh robot@%s rubiks-cube-tracker.py' % SERVER
 
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()

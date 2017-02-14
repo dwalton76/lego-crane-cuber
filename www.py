@@ -5,6 +5,7 @@ from pprint import pformat
 import logging
 import math
 import json
+import os
 import sys
 
 
@@ -703,14 +704,20 @@ if __name__ == '__main__':
     logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
-    with open('colors_raw.json', 'r') as fh:
-        output = fh.readlines()[0]
-        raw = json.loads(output)
-        raw = convert_key_strings_to_int(raw)
+    if os.path.exists('colors_raw.json'):
+        with open('colors_raw.json', 'r') as fh:
+            output = fh.readlines()[0]
+            raw = json.loads(output)
+            raw = convert_key_strings_to_int(raw)
+    else:
+        raw = {}
 
-    with open('colors_resolved.json', 'r') as fh:
-        output = ''.join(fh.readlines())
-        resolved = json.loads(output)
+    if os.path.exists('colors_resolved_raw.json'):
+        with open('colors_resolved.json', 'r') as fh:
+            output = ''.join(fh.readlines())
+            resolved = json.loads(output)
+    else:
+        resolved = {}
 
     square_count = len(raw.keys())
     size = int(math.sqrt(square_count / 6))
@@ -720,23 +727,22 @@ if __name__ == '__main__':
 
         fh.write("<h1>Initial RGB values</h1>\n")
         write_cube(fh, raw, size)
-        #write_footer(fh)
-        #sys.exit(0)
 
         # Build dict where the RGB values are the RGB colors of the square's finalSide
-        cube = {}
-        for (square_index, value) in resolved['squares'].items():
-            final_side = value['finalSide']
-            cube[square_index] = (
-                int(resolved['sides'][final_side]['red']),
-                int(resolved['sides'][final_side]['green']),
-                int(resolved['sides'][final_side]['blue']),
-            )
-        cube = convert_key_strings_to_int(cube)
+        if resolved:
+            cube = {}
+            for (square_index, value) in resolved['squares'].items():
+                final_side = value['finalSide']
+                cube[square_index] = (
+                    int(resolved['sides'][final_side]['red']),
+                    int(resolved['sides'][final_side]['green']),
+                    int(resolved['sides'][final_side]['blue']),
+                )
+            cube = convert_key_strings_to_int(cube)
 
-        # Display the initial cube
-        fh.write("<h1>RGB values mapped to 6 colors</h1>\n")
-        write_cube(fh, cube, size)
+            # Display the initial cube
+            fh.write("<h1>RGB values mapped to 6 colors</h1>\n")
+            write_cube(fh, cube, size)
 
         # Uncomment to exit after displaying the initial cube
         write_footer(fh)

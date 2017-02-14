@@ -21,13 +21,13 @@ $ make
 $ sudo make install
 ```
 
-### Installing rubiks-square-extractor
-We use a webcam to take a picture of all six sides of the cube. rubiks-square-extractor
+### Installing rubiks-cube-tracker
+We use a webcam to take a picture of all six sides of the cube. rubiks-cube-tracker
 analyzes those images and finds the rubiks cube squares in each image. It returns
 the mean RGB value for each square.
 ```
 $ sudo apt-get install python-pip
-$ sudo pip install git+https://github.com/dwalton76/rubiks-square-extractor.git
+$ sudo pip install git+https://github.com/dwalton76/rubiks-cube-tracker.git
 
 ```
 
