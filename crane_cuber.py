@@ -522,18 +522,25 @@ class CraneCuber3x3x3(object):
             os.unlink(png_filename)
 
         # capture a single png from the webcam
-        subprocess.call(['fswebcam',
-                         '--device', '/dev/video0',
-                         '--no-timestamp',
-                         '--no-title',
-                         '--no-subtitle',
-                         '--no-banner',
-                         '--no-info',
-                         '-s', 'brightness=120%',
-                         '-r', '352x240',
-                         #'-r', '176x120',
-                         '--png', '1',
-                         png_filename])
+        cmd = ['fswebcam',
+               '--device', '/dev/video0',
+               '--no-timestamp',
+               '--no-title',
+               '--no-subtitle',
+               '--no-banner',
+               '--no-info',
+               '-s', 'brightness=120%',
+               '-r', '352x240',
+               '--png', '1']
+
+        # The L, F, R, and B sides are simple, for the U and D sides the cube in
+        # the png is rotated by 90 degrees so tell fswebcam to rotate 270
+        if name in ('U', 'D'):
+            cmd.append('--rotate')
+            cmd.append('270')
+
+        cmd.append(png_filename)
+        subprocess.call(cmd)
 
         if not os.path.exists(png_filename):
             self.shutdown = True
