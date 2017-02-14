@@ -26,7 +26,8 @@ We use a webcam to take a picture of all six sides of the cube. rubiks-square-ex
 analyzes those images and finds the rubiks cube squares in each image. It returns
 the mean RGB value for each square.
 ```
-$ sudo pip3 install git+https://github.com/dwalton76/rubiks-square-extractor.git
+$ sudo apt-get install python-pip
+$ sudo pip install git+https://github.com/dwalton76/rubiks-square-extractor.git
 
 ```
 
