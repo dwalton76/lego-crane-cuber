@@ -33,25 +33,48 @@ So we will define the former layout as "scramble" and the latter as "normal".
 Convert the normal layout (sys.argv[1] must be in the 'normal' layout) to
 the scramble layout.
 '''
+
+# sys.argv[1] must be in U, R, F, D, L, B order
+# This is the order used by the kociemba 3x3x3 solver so
+# the rubiks-color-resolver uses this order
 normal = list(sys.argv[1])
-scramble = normal[0:4]
-scramble.append(normal[4])
-scramble.append(normal[5])
-scramble.append(normal[8])
-scramble.append(normal[9])
-scramble.append(normal[12])
-scramble.append(normal[13])
-scramble.append(normal[16])
-scramble.append(normal[17])
-scramble.append(normal[6])
-scramble.append(normal[7])
-scramble.append(normal[10])
-scramble.append(normal[11])
-scramble.append(normal[14])
-scramble.append(normal[15])
-scramble.append(normal[18])
-scramble.append(normal[19])
-scramble.extend(normal[20:24])
+upper = normal[0:4]
+right = normal[4:8]
+front = normal[8:12]
+down = normal[12:16]
+left = normal[16:20]
+back = normal[20:24]
+
+'''
+from pprint import pformat
+print "upper: %s" % pformat(upper)
+print "right: %s" % pformat(right)
+print "front: %s" % pformat(front)
+print "down: %s" % pformat(down)
+print "left: %s" % pformat(left)
+print "back: %s" % pformat(back)
+'''
+
+scramble = []
+scramble.extend(upper)
+scramble.append(left[0])
+scramble.append(left[1])
+scramble.append(front[0])
+scramble.append(front[1])
+scramble.append(right[0])
+scramble.append(right[1])
+scramble.append(back[0])
+scramble.append(back[1])
+
+scramble.append(left[2])
+scramble.append(left[3])
+scramble.append(front[2])
+scramble.append(front[3])
+scramble.append(right[2])
+scramble.append(right[3])
+scramble.append(back[2])
+scramble.append(back[3])
+scramble.extend(down)
 
 o = ''.join
 d = [{o((' ', x)[x in scramble[12] + scramble[19] + scramble[22]]for x in scramble):[]},
