@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from pprint import pformat
+import colorsys
 import logging
 import math
 import json
@@ -124,8 +125,13 @@ def write_cube(fh, cube, size):
             fh.write("<div class='side' id='%s'>\n" % sides[side_index])
 
         (red, green, blue) = cube[index]
-        fh.write("    <div class='square col%d' title='(%d, %d, %d)' style='background-color: #%s%s%s;'><span>%s</span></div>\n" %
-            (col, red, green, blue,
+        (H, S, V) = colorsys.rgb_to_hsv(float(red/255), float(green/255), float(blue/255))
+        H = int(H * 360)
+        S = int(S * 100)
+        V = int(V * 100)
+
+        fh.write("    <div class='square col%d' title='RGB (%d, %d, %d) HSV (%d, %d, %d)' style='background-color: #%s%s%s;'><span>%s</span></div>\n" %
+            (col, red, green, blue, H, S, V,
              str(hex(red))[2:].zfill(2),
              str(hex(green))[2:].zfill(2),
              str(hex(blue))[2:].zfill(2),
