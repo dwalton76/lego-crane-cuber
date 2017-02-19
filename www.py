@@ -9,11 +9,13 @@ import json
 import os
 import sys
 
+log = logging.getLogger(__name__)
+
 
 def convert_key_strings_to_int(data):
     result = {}
     for (key, value) in data.items():
-        if key.isdigit():
+        if isinstance(key, str) and key.isdigit():
             result[int(key)] = value
         else:
             result[key] = value
@@ -110,6 +112,8 @@ def get_important_square_indexes(size):
 
 
 def write_cube(fh, cube, size):
+    cube = convert_key_strings_to_int(cube)
+
     col = 1
     squares_per_side = size * size
     min_square = 1
