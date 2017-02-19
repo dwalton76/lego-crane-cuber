@@ -142,22 +142,25 @@ class CraneCuber3x3x3(object):
         self.turntable.stop(stop_action='hold')
 
     def shutdown_robot(self):
-        log.info('Shutting down')
 
-        if self.www:
-            self.www.shutdown()
+        if self.shutdown:
+            return
 
+        log.info('shutting down')
         self.elevate(0)
 
-        flipper_pos = self.flipper.position
-
-        if flipper_pos > 10:
+        if self.flipper.position > 10:
             self.flip()
-
-        self.shutdown = True
 
         for x in self.motors:
             x.stop(stop_action='brake')
+
+        if self.www:
+            self.www.shutdown()
+            self.www.join()
+            self.www = None
+
+        self.shutdown = True
 
     def signal_term_handler(self, signal, frame):
         log.error('Caught SIGTERM')
@@ -192,6 +195,7 @@ class CraneCuber3x3x3(object):
                                       stop_action='hold',
                                       ramp_up_sp=100,
                                       ramp_down_sp=200)
+        self.turntable.wait_until('running')
         self.turntable.wait_while('running')
 
         # uncomment this if you want to test with 100% accurate rotate position
@@ -310,6 +314,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=100,
                                     stop_action='hold')
+        self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
 
         self.flipper.run_to_abs_pos(position_sp=0,
@@ -317,6 +322,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=100,
                                     stop_action='hold')
+        self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
 
     def flip(self):
@@ -348,6 +354,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=100,
                                     stop_action='hold')
+        self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=2000)
         self.flipper_at_init = not self.flipper_at_init
         finish = datetime.datetime.now()
@@ -486,6 +493,7 @@ class CraneCuber3x3x3(object):
                                              ramp_down_sp=200, # ramp_down so we stop at the right spot
                                              stop_action='hold')
 
+        self.elevator.wait_until('running')
         self.elevator.wait_while('running')
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -769,9 +777,24 @@ class CraneCuber3x3x3(object):
         self.time_flip = 0
         self.time_rotate = 0
 
+        # If use_shortcut is True and we do back-to-back set of moves on opposite
+        # faces (like "F B") do not bother flipping the cube around to make B face
+        # up, just rotate with F facing up.
+        #
+        # 2x2x2 - does not apply since solver only uses U F and R
+        # 3x3x3 - works just fine
+        # 4x4x4 - does not work...cube doesn't solve...need to investigate
+        # 5x5x5 - works just fine
+        if self.rows_and_cols in (3, 5):
+            use_shortcut = True
+        else:
+            use_shortcut = False
+
         for (index, action) in enumerate(actions):
             desc = "Move %d/%d: %s" % (index, total_actions, action)
             log.info(desc)
+            #log.info("Up %s, Down %s, North %s, West %s, South %s, East %s" %
+            #        (self.facing_up, self.facing_down, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
 
             if self.shutdown:
                 break
@@ -780,18 +803,24 @@ class CraneCuber3x3x3(object):
                 continue
 
             if action.endswith("'") or action.endswith("’"):
+                action = action[0:-1]
                 clockwise = False
             else:
                 clockwise = True
 
-            if '2' in action:
+            if action.endswith('2'):
                 quarter_turns = 2
+                action = action[0:-1]
+            elif action.endswith('1'):
+                quarter_turns = 1
+                action = action[0:-1]
             else:
                 quarter_turns = 1
 
             target_face = action[0]
             direction = None
 
+            # The 4x4x4 java solver is the only one that uses this notation
             if 'w' in action:
                 rows = 2
             else:
@@ -800,18 +829,26 @@ class CraneCuber3x3x3(object):
             if self.facing_up == 'U':
                 if target_face == 'U':
                     self.elevate(rows)
+                elif use_shortcut and target_face == 'D':
+                    rows = self.rows_and_cols - rows
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'L':
                 if target_face == 'L':
                     self.elevate(rows)
+                elif use_shortcut and target_face == 'R':
+                    rows = self.rows_and_cols - rows
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
-            # dwalton - some time to be saved on a F2 -> B2 sequence
             elif self.facing_up == 'F':
                 if target_face == 'F':
+                    self.elevate(rows)
+                elif use_shortcut and target_face == 'B':
+                    rows = self.rows_and_cols - rows
                     self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
@@ -819,17 +856,26 @@ class CraneCuber3x3x3(object):
             elif self.facing_up == 'R':
                 if target_face == 'R':
                     self.elevate(rows)
+                elif use_shortcut and target_face == 'L':
+                    rows = self.rows_and_cols - rows
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'B':
                 if target_face == 'B':
                     self.elevate(rows)
+                elif use_shortcut and target_face == 'F':
+                    rows = self.rows_and_cols - rows
+                    self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
 
             elif self.facing_up == 'D':
                 if target_face == 'D':
+                    self.elevate(rows)
+                elif use_shortcut and target_face == 'U':
+                    rows = self.rows_and_cols - rows
                     self.elevate(rows)
                 else:
                     direction = self.get_direction(target_face)
@@ -934,7 +980,6 @@ class CraneCuber3x3x3(object):
                         int(self.resolved_colors['sides'][final_side]['colorScan']['blue']),
                     )
 
-                log.info("FOO\n%s\n" % pformat(self.cube_for_www))
                 # Display the initial cube
                 fh.write("<h1>RGB values mapped to 6 colors</h1>\n")
                 write_cube(fh, self.cube_for_www, self.rows_and_cols)
@@ -948,6 +993,11 @@ class CraneCuber3x3x3(object):
                 raise Exception("update_index_html does not support mode '%s'" % mode)
 
             write_footer(fh)
+
+    def test_foo(self):
+        #foo = ("U", "Uw", "Dw", "D")
+        foo = ("U'", "D'")
+        self.run_actions(foo)
 
     def test_basics(self):
         """
@@ -1102,7 +1152,7 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
 
         # These are for a 62mm 4x4x4 cube
         # 60 is perfect for clockwise
-        self.TURN_BLOCKED_TOUCH_DEGREES = 59
+        self.TURN_BLOCKED_TOUCH_DEGREES = 65
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 20
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 4
@@ -1250,6 +1300,7 @@ class CraneCuberWebHandler(RobotWebHandler):
 
         raise Exception("We should not be here")
 
+
 class WebServer(Thread):
 
     def __init__(self, robot):
@@ -1308,14 +1359,10 @@ if __name__ == '__main__':
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
-    cc = CraneCuber5x5x5(SERVER)
+    #cc = CraneCuber4x4x4(SERVER)
+    cc = CraneCuber3x3x3(SERVER)
     cc.init_motors()
-
-    cc.run_actions(("U", ))
-    cc.wait_for_touch_sensor()
-
-    cc.run_actions(("U'", ))
-
+    cc.test_foo()
     cc.shutdown_robot()
     sys.exit(0)
     '''
@@ -1363,6 +1410,7 @@ if __name__ == '__main__':
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
             web_server.robot = cc
+            cc.www = web_server
             cc.colors = colors
             cc.resolve_colors()
             cc.resolve_actions()

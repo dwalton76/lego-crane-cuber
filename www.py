@@ -436,7 +436,7 @@ def run_action(cube, action):
                 top_first_square = (squares_per_side - size) + 1 - (row * size)
                 top_last_square = top_first_square + size - 1
 
-                left_first_square = squares_per_side + 4 - row
+                left_first_square = squares_per_side + size - row
                 left_last_square = left_first_square + ((size - 1) * size)
 
                 down_first_square = (squares_per_side * 5) + 1 + (row * size)
