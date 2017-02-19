@@ -24,8 +24,6 @@ import sys
 
 log = logging.getLogger(__name__)
 
-SERVER = None
-
 # positive moves to init position
 # negative moves towards camera
 # This should be 90 degrees but some extra is needed to account for play between the gears
@@ -79,7 +77,8 @@ def round_to_quarter_turn(target_degrees):
 
 class CraneCuber3x3x3(object):
 
-    def __init__(self, rows_and_cols=3, size_mm=57):
+    def __init__(self, SERVER, rows_and_cols=3, size_mm=57):
+        self.SERVER = SERVER
         self.shutdown = False
         self.rows_and_cols = rows_and_cols
         self.size_mm = size_mm
@@ -567,19 +566,19 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('R')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('B')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('L')
 
         # expose the 'D' side, then raise the cube so we can get the flipper out
@@ -595,7 +594,7 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('U')
 
         # To make troubleshooting easier, move the F of the cube so that it
@@ -605,17 +604,17 @@ class CraneCuber3x3x3(object):
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
 
     def get_colors(self):
 
         if self.shutdown:
             return
 
-        cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % SERVER
+        cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % self.SERVER
         log.info(cmd)
         subprocess.call(cmd, shell=True)
-        cmd = 'ssh robot@%s rubiks-cube-tracker.py --directory /tmp/' % SERVER
+        cmd = 'ssh robot@%s rubiks-cube-tracker.py --directory /tmp/' % self.SERVER
         log.info(cmd)
 
         try:
@@ -638,7 +637,7 @@ class CraneCuber3x3x3(object):
         # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
 
         cmd = ['ssh',
-               'robot@%s' % SERVER,
+               'robot@%s' % self.SERVER,
                'rubiks-color-resolver.py',
                '--json',
                "'%s'" % json.dumps(self.colors)]
@@ -810,6 +809,7 @@ class CraneCuber3x3x3(object):
                 else:
                     direction = self.get_direction(target_face)
 
+            # dwalton - some time to be saved on a F2 -> B2 sequence
             elif self.facing_up == 'F':
                 if target_face == 'F':
                     self.elevate(rows)
@@ -899,7 +899,7 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        cmd = 'ssh robot@%s "kociemba %s"' % (SERVER, self.cube_for_resolver)
+        cmd = 'ssh robot@%s "kociemba %s"' % (self.SERVER, self.cube_for_resolver)
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
         actions = output.split()
@@ -1067,8 +1067,8 @@ class CraneCuber3x3x3(object):
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
 
-    def __init__(self, rows_and_cols=2, size_mm=40):
-        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+    def __init__(self, SERVER, rows_and_cols=2, size_mm=40):
+        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
 
         # These are for a 40mm 2x2x2 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
@@ -1081,7 +1081,7 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        cmd = 'ssh robot@%s rubiks_2x2x2_solver.py "%s"' % (SERVER, ''.join(self.cube_for_resolver))
+        cmd = 'ssh robot@%s rubiks_2x2x2_solver.py "%s"' % (self.SERVER, ''.join(self.cube_for_resolver))
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
 
@@ -1097,8 +1097,8 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
 class CraneCuber4x4x4(CraneCuber3x3x3):
 
-    def __init__(self, rows_and_cols=4, size_mm=62):
-        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+    def __init__(self, SERVER, rows_and_cols=4, size_mm=62):
+        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
         # 60 is perfect for clockwise
@@ -1112,7 +1112,7 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (SERVER, ''.join(self.cube_for_resolver))
+        cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (self.SERVER, ''.join(self.cube_for_resolver))
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1].strip()
 
@@ -1127,17 +1127,16 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
 
 class CraneCuber5x5x5(CraneCuber3x3x3):
 
-    def __init__(self, rows_and_cols=5, size_mm=63):
-        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+    def __init__(self, SERVER, rows_and_cols=5, size_mm=63):
+        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 50
+        self.TURN_BLOCKED_TOUCH_DEGREES = 52
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 3
 
     def resolve_actions(self):
-        # java -cp bin -Xmx4g justsomerandompackagename.solver LLBUULLBUUDUUDDLLLBBLLURRDDUUBDDUUBDDDFFDDFBBDDFBBFLRBBFLRBBBBRDDDDLRRDDLRRFFLFFRRLDDRRLBBRRBRRRRBRRUULUUFFLUUUUFRRBBFFLBBFFLLLLDDLLDFFFFBUUUURFFUURFF
 
         if self.shutdown:
             return
@@ -1152,7 +1151,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         cube_string = ''.join(cube_string)
         log.info("cube string for 5x5x5 reducer %s" % cube_string)
 
-        cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (SERVER, cube_string)
+        cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (self.SERVER, cube_string)
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()
         '''
@@ -1206,7 +1205,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         log.info("cube_string_for_3x3x3 %s" % cube_string_for_3x3x3)
 
         # The only reason we cd to the directory here is so the cache dir is in the same place each time
-        cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s"' % (SERVER, cube_string_for_3x3x3)
+        cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s"' % (self.SERVER, cube_string_for_3x3x3)
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
 
@@ -1222,8 +1221,8 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
 
 class CraneCuber6x6x6(CraneCuber3x3x3):
 
-    def __init__(self, rows_and_cols=6, size_mm=67):
-        CraneCuber3x3x3.__init__(self, rows_and_cols, size_mm)
+    def __init__(self, SERVER, rows_and_cols=6, size_mm=67):
+        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
 
         # These are for a 67mm 6x6x6 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 29
@@ -1281,8 +1280,9 @@ if __name__ == '__main__':
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
 
     server_conf = "server.conf"
+    SERVER = None
+
     if os.path.exists(server_conf):
-        global SERVER
 
         with open(server_conf, 'r') as fh:
             for line in fh.readlines():
@@ -1308,7 +1308,7 @@ if __name__ == '__main__':
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
-    cc = CraneCuber5x5x5()
+    cc = CraneCuber5x5x5(SERVER)
     cc.init_motors()
 
     cc.run_actions(("U", ))
@@ -1326,7 +1326,7 @@ if __name__ == '__main__':
         first = True
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
-            cc = CraneCuber3x3x3()
+            cc = CraneCuber3x3x3(SERVER)
 
             if first:
                 cc.init_motors()
@@ -1350,15 +1350,15 @@ if __name__ == '__main__':
             size = int(math.sqrt(squares_per_side))
 
             if size == 2:
-                cc = CraneCuber2x2x2()
+                cc = CraneCuber2x2x2(SERVER)
             elif size == 3:
-                cc = CraneCuber3x3x3()
+                cc = CraneCuber3x3x3(SERVER)
             elif size == 4:
-                cc = CraneCuber4x4x4()
+                cc = CraneCuber4x4x4(SERVER)
             elif size == 5:
-                cc = CraneCuber5x5x5()
+                cc = CraneCuber5x5x5(SERVER)
             elif size == 6:
-                cc = CraneCuber6x6x6()
+                cc = CraneCuber6x6x6(SERVER)
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
