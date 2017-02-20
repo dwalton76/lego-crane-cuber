@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 # positive moves to init position
 # negative moves towards camera
 # This should be 90 degrees but some extra is needed to account for play between the gears
-FLIPPER_DEGREES = -123
+FLIPPER_DEGREES = -140
 FLIPPER_SPEED = 300
 
 # The gear ratio is 1:2.333
@@ -1305,7 +1305,6 @@ class WebServer(Thread):
 
     def __init__(self, robot):
         Thread.__init__(self)
-        robot.www = self
         self.robot = robot
         self.www = None
 
@@ -1367,19 +1366,20 @@ if __name__ == '__main__':
     sys.exit(0)
     '''
     cc = None
+    web_server = None
 
     try:
-
-        first = True
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
             cc = CraneCuber3x3x3(SERVER)
 
-            if first:
+            if web_server:
+                cc.www = web_server
+            else:
                 cc.init_motors()
                 web_server = WebServer(cc)
                 web_server.start()
-                first = False
+                cc.www = web_server
 
             cc.wait_for_touch_sensor()
             cc.scan()
