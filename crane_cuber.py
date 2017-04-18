@@ -609,16 +609,19 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % self.SERVER
-        log.info(cmd)
-        subprocess.call(cmd, shell=True)
-        cmd = 'ssh robot@%s rubiks-cube-tracker.py --directory /tmp/' % self.SERVER
-        log.info(cmd)
+        if self.SERVER:
+            cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % self.SERVER
+            log.info(cmd)
+            subprocess.call(cmd, shell=True)
+            cmd = 'ssh robot@%s rubiks-cube-tracker.py --directory /tmp/' % self.SERVER
+        else:
+            cmd = 'rubiks-cube-tracker.py --directory /tmp/'
 
         try:
+            log.info(cmd)
             output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
         except Exception as e:
-            log.warning("rubiks-square-extractor.py failed")
+            log.warning("rubiks-cube-tracker.py failed")
             log.exception(e)
             self.shutdown_robot()
             return
@@ -633,15 +636,19 @@ class CraneCuber3x3x3(object):
         log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
         # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
 
-        cmd = ['ssh',
-               'robot@%s' % self.SERVER,
-               'rubiks-color-resolver.py',
-               '--json',
-               "'%s'" % json.dumps(self.colors)]
-
-        log.info(' '.join(cmd))
+        if self.SERVER:
+            cmd = ['ssh',
+                   'robot@%s' % self.SERVER,
+                   'rubiks-color-resolver.py',
+                   '--json',
+                   "'%s'" % json.dumps(self.colors)]
+        else:
+            cmd = ['rubiks-color-resolver.py',
+                   '--json',
+                   "'%s'" % json.dumps(self.colors)]
 
         try:
+            log.info(' '.join(cmd))
             self.resolved_colors = json.loads(subprocess.check_output(cmd).decode('ascii').strip())
         except Exception as e:
             log.warning("rubiks-color-resolver.py failed")
@@ -932,7 +939,11 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        cmd = 'ssh robot@%s "kociemba %s"' % (self.SERVER, self.cube_for_resolver)
+        if self.SERVER:
+            cmd = 'ssh robot@%s "kociemba %s"' % (self.SERVER, self.cube_for_resolver)
+        else:
+            cmd = 'kociemba %s' % self.cube_for_resolver
+
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
         actions = output.split()
@@ -1080,7 +1091,11 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        cmd = 'ssh robot@%s rubiks_2x2x2_solver.py "%s"' % (self.SERVER, ''.join(self.cube_for_resolver))
+        if self.SERVER:
+            cmd = 'ssh robot@%s rubiks_2x2x2_solver.py "%s"' % (self.SERVER, ''.join(self.cube_for_resolver))
+        else:
+            cmd = 'rubiks_2x2x2_solver.py "%s"' % ''.join(self.cube_for_resolver)
+
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
 
@@ -1111,7 +1126,11 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         if self.shutdown:
             return
 
-        cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (self.SERVER, ''.join(self.cube_for_resolver))
+        if self.SERVER:
+            cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (self.SERVER, ''.join(self.cube_for_resolver))
+        else:
+            cmd = "cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s" % ''.join(self.cube_for_resolver)
+
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1].strip()
 
@@ -1150,7 +1169,11 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         cube_string = ''.join(cube_string)
         log.info("cube string for 5x5x5 reducer %s" % cube_string)
 
-        cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (self.SERVER, cube_string)
+        if self.SERVER:
+            cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (self.SERVER, cube_string)
+        else:
+            cmd = "cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s" % cube_string
+
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()
         '''
@@ -1204,7 +1227,11 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         log.info("cube_string_for_3x3x3 %s" % cube_string_for_3x3x3)
 
         # The only reason we cd to the directory here is so the cache dir is in the same place each time
-        cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s"' % (self.SERVER, cube_string_for_3x3x3)
+        if self.SERVER:
+            cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s"' % (self.SERVER, cube_string_for_3x3x3)
+        else:
+            cmd = 'cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s' % cube_string_for_3x3x3
+
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
 
@@ -1259,17 +1286,15 @@ if __name__ == '__main__':
         if SERVER is None:
             print("ERROR: The server.conf does not contain a server")
             sys.exit(1)
-    else:
-        print("ERROR: The server.conf does not exist...see README for instructions")
-        sys.exit(1)
 
-    log.info("Verify we can ssh to %s without a password" % SERVER)
-    cmd = 'ssh robot@%s ls /tmp' % SERVER
-    try:
-        subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('ascii').strip()
-    except Exception as e:
-        print("ERROR: '%s' failed due to %s, cannot ssh to server" % (cmd, e))
-        sys.exit(1)
+    if SERVER:
+        log.info("Verify we can ssh to %s without a password" % SERVER)
+        cmd = 'ssh robot@%s ls /tmp' % SERVER
+        try:
+            subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('ascii').strip()
+        except Exception as e:
+            print("ERROR: '%s' failed due to %s, cannot ssh to server" % (cmd, e))
+            sys.exit(1)
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''

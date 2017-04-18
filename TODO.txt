@@ -1,5 +1,5 @@
 
-- chop the WebServer code...use curses instead
-- need ability to run without SERVER
+DONE - chop the WebServer code...use curses instead
+DONE - need ability to run without SERVER
 
 
