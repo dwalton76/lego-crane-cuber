@@ -7,8 +7,6 @@ A Rubiks cube solving robot made from EV3 + 42009
 
 from copy import deepcopy
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
-from ev3dev.webserver import RobotWebServer, RobotWebHandler
-from www import write_header, write_cube, write_footer, run_action as www_run_action, convert_key_strings_to_int
 from math import pi
 from pprint import pformat
 from time import sleep
@@ -102,7 +100,6 @@ class CraneCuber3x3x3(object):
         self.time_rotate = 0
         self.flipper_at_init = True
         self.colors = {}
-        self.www = None
 
         # These numbers are for a 57mm 3x3x3 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 112
@@ -154,11 +151,6 @@ class CraneCuber3x3x3(object):
 
         for x in self.motors:
             x.stop(stop_action='brake')
-
-        if self.www:
-            self.www.shutdown()
-            self.www.join()
-            self.www = None
 
         self.shutdown = True
 
@@ -560,8 +552,6 @@ class CraneCuber3x3x3(object):
             self.shutdown = True
             return
 
-        self.update_index_html(mode='scan')
-
     def scan(self):
 
         if self.shutdown:
@@ -634,7 +624,6 @@ class CraneCuber3x3x3(object):
             return
 
         self.colors = json.loads(output)
-        self.update_index_html(mode='get_colors')
 
     def resolve_colors(self):
 
@@ -666,7 +655,6 @@ class CraneCuber3x3x3(object):
         log.info("Final Colors: %s" % self.cube_for_resolver)
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
                     (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
-        self.update_index_html(mode='resolve_colors')
 
     def move_north_to_top(self, rows=1):
         log.info("move_north_to_top() - flipper_at_init %s" % self.flipper_at_init)
@@ -898,7 +886,6 @@ class CraneCuber3x3x3(object):
                     raise Exception("Unsupported direction %s" % direction)
 
             self.rotate(clockwise, quarter_turns)
-            self.update_index_html('action', action, desc)
             log.info("\n\n\n\n")
             moves += 1
 
@@ -955,44 +942,6 @@ class CraneCuber3x3x3(object):
 
         if not self.flipper_at_init:
             self.flip()
-
-    def update_index_html(self, mode, option=None, desc=None):
-
-        with open('index.html', 'w') as fh:
-            write_header(fh, self.rows_and_cols)
-
-            if mode == 'scan':
-                pass
-
-            elif mode == 'get_colors':
-                fh.write("<h1>Initial RGB values</h1>\n")
-                write_cube(fh, self.colors, self.rows_and_cols)
-
-            elif mode == 'resolve_colors':
-
-                # Build dict where the RGB values are the RGB colors of the square's finalSide
-                self.cube_for_www = {}
-                for (square_index, value) in self.resolved_colors['squares'].items():
-                    final_side = value['finalSide']
-                    self.cube_for_www[square_index] = (
-                        int(self.resolved_colors['sides'][final_side]['colorScan']['red']),
-                        int(self.resolved_colors['sides'][final_side]['colorScan']['green']),
-                        int(self.resolved_colors['sides'][final_side]['colorScan']['blue']),
-                    )
-
-                # Display the initial cube
-                fh.write("<h1>RGB values mapped to 6 colors</h1>\n")
-                write_cube(fh, self.cube_for_www, self.rows_and_cols)
-
-            elif mode == 'action':
-                fh.write("<h1>%s</h1>\n" % desc)
-                self.cube_for_www = www_run_action(self.cube_for_www, option)
-                write_cube(fh, self.cube_for_www, self.rows_and_cols)
-
-            else:
-                raise Exception("update_index_html does not support mode '%s'" % mode)
-
-            write_footer(fh)
 
     def test_foo(self):
         #foo = ("U", "Uw", "Dw", "D")
@@ -1284,40 +1233,6 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         raise Exception("No solver available for 6x6x6")
 
 
-class CraneCuberWebHandler(RobotWebHandler):
-
-    def __str__(self):
-        return 'CraneCuberWebHandler'
-
-    def do_GET(self):
-        """
-        Returns True if the requested URL is supported
-        """
-        log.info("www %s" % self.path)
-
-        if RobotWebHandler.do_GET(self):
-            return True
-
-        raise Exception("We should not be here")
-
-
-class WebServer(Thread):
-
-    def __init__(self, robot):
-        Thread.__init__(self)
-        self.robot = robot
-        self.www = None
-
-    def shutdown(self):
-        log.info("shutting down WebServer")
-        if self.www:
-            self.www.content_server.shutdown()
-
-    def run(self):
-        self.www = RobotWebServer(self.robot, CraneCuberWebHandler, 8000)
-        self.www.run()
-
-
 if __name__ == '__main__':
 
     # logging.basicConfig(filename='rubiks.log',
@@ -1366,21 +1281,12 @@ if __name__ == '__main__':
     sys.exit(0)
     '''
     cc = None
-    web_server = None
 
     try:
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
             cc = CraneCuber3x3x3(SERVER)
-
-            if web_server:
-                cc.www = web_server
-            else:
-                cc.init_motors()
-                web_server = WebServer(cc)
-                web_server.start()
-                cc.www = web_server
-
+            cc.init_motors()
             cc.wait_for_touch_sensor()
             cc.scan()
             cc.get_colors()
@@ -1409,8 +1315,6 @@ if __name__ == '__main__':
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
-            web_server.robot = cc
-            cc.www = web_server
             cc.colors = colors
             cc.resolve_colors()
             cc.resolve_actions()
