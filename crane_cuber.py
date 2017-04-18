@@ -7,15 +7,18 @@ A Rubiks cube solving robot made from EV3 + 42009
 
 from copy import deepcopy
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
-from math import pi
+from rubikscolorresolver import RubiksColorSolverGeneric
+from math import pi, sqrt
 from pprint import pformat
 from time import sleep
 from threading import Thread, Event
+import argparse
 import datetime
 import json
 import logging
 import math
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -73,18 +76,69 @@ def round_to_quarter_turn(target_degrees):
     return result
 
 
+def convert_key_strings_to_int(data):
+    result = {}
+    for (key, value) in data.items():
+        if isinstance(key, str) and key.isdigit():
+            result[int(key)] = value
+        else:
+            result[key] = value
+    return result
+
+
+class DummyMotor(object):
+
+    def __init__(self, address):
+        self.address = address
+        self.connected = True
+        self.position = 0
+
+    def reset(self):
+        pass
+
+    def stop(self, stop_action=None):
+        pass
+
+    def run_forever(self, speed_sp, stop_action):
+        pass
+
+    def run_to_abs_pos(self, speed_sp=None, stop_action=None, position_sp=None, ramp_up_sp=None, ramp_down_sp=None):
+        pass
+
+    def wait_until(self, state):
+        pass
+
+    def wait_while(self, state, timeout=None):
+        pass
+
+
+class DummySensor(object):
+
+    def is_pressed(self):
+        return True
+
+
 class CraneCuber3x3x3(object):
 
-    def __init__(self, SERVER, rows_and_cols=3, size_mm=57):
+    def __init__(self, SERVER, emulate, rows_and_cols=3, size_mm=57):
         self.SERVER = SERVER
         self.shutdown = False
         self.rows_and_cols = rows_and_cols
         self.size_mm = size_mm
         self.square_size_mm = float(self.size_mm / self.rows_and_cols)
-        self.elevator = LargeMotor(OUTPUT_A)
-        self.flipper = MediumMotor(OUTPUT_B)
-        self.turntable= LargeMotor(OUTPUT_C)
-        self.touch_sensor = TouchSensor()
+        self.emulate = emulate
+
+        if self.emulate:
+            self.elevator = DummyMotor(OUTPUT_A)
+            self.flipper = DummyMotor(OUTPUT_B)
+            self.turntable= DummyMotor(OUTPUT_C)
+            self.touch_sensor = DummySensor()
+        else:
+            self.elevator = LargeMotor(OUTPUT_A)
+            self.flipper = MediumMotor(OUTPUT_B)
+            self.turntable= LargeMotor(OUTPUT_C)
+            self.touch_sensor = TouchSensor()
+
         self.motors = [self.elevator, self.flipper, self.turntable]
         self.rows_in_turntable = 0
         self.facing_up = 'U'
@@ -528,25 +582,28 @@ class CraneCuber3x3x3(object):
         if os.path.exists(png_filename):
             os.unlink(png_filename)
 
-        # capture a single png from the webcam
-        cmd = ['fswebcam',
-               '--device', '/dev/video0',
-               '--no-timestamp',
-               '--no-title',
-               '--no-subtitle',
-               '--no-banner',
-               '--no-info',
-               '-r', '352x240',
-               '--png', '1']
+        if self.emulate:
+            shutil.copy('/home/dwalton/lego/rubiks-cube-tracker/test/test-data/3x3x3-random-01/rubiks-side-%s.png' % name, '/tmp/')
+        else:
+            # capture a single png from the webcam
+            cmd = ['fswebcam',
+                   '--device', '/dev/video0',
+                   '--no-timestamp',
+                   '--no-title',
+                   '--no-subtitle',
+                   '--no-banner',
+                   '--no-info',
+                   '-r', '352x240',
+                   '--png', '1']
 
-        # The L, F, R, and B sides are simple, for the U and D sides the cube in
-        # the png is rotated by 90 degrees so tell fswebcam to rotate 270
-        if name in ('U', 'D'):
-            cmd.append('--rotate')
-            cmd.append('270')
+            # The L, F, R, and B sides are simple, for the U and D sides the cube in
+            # the png is rotated by 90 degrees so tell fswebcam to rotate 270
+            if name in ('U', 'D'):
+                cmd.append('--rotate')
+                cmd.append('270')
 
-        cmd.append(png_filename)
-        subprocess.call(cmd)
+            cmd.append(png_filename)
+            subprocess.call(cmd)
 
         if not os.path.exists(png_filename):
             self.shutdown = True
@@ -615,11 +672,12 @@ class CraneCuber3x3x3(object):
             subprocess.call(cmd, shell=True)
             cmd = 'ssh robot@%s rubiks-cube-tracker.py --directory /tmp/' % self.SERVER
         else:
+            # There isn't opencv support in python3 yet so this has to remain a subprocess call for now
             cmd = 'rubiks-cube-tracker.py --directory /tmp/'
 
         try:
             log.info(cmd)
-            output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).decode('ascii').strip()
         except Exception as e:
             log.warning("rubiks-cube-tracker.py failed")
             log.exception(e)
@@ -642,26 +700,31 @@ class CraneCuber3x3x3(object):
                    'rubiks-color-resolver.py',
                    '--json',
                    "'%s'" % json.dumps(self.colors)]
-        else:
-            cmd = ['rubiks-color-resolver.py',
-                   '--json',
-                   "'%s'" % json.dumps(self.colors)]
 
-        try:
-            log.info(' '.join(cmd))
-            self.resolved_colors = json.loads(subprocess.check_output(cmd).decode('ascii').strip())
-        except Exception as e:
-            log.warning("rubiks-color-resolver.py failed")
-            log.exception(e)
-            self.shutdown_robot()
-            return
+            try:
+                log.info(' '.join(cmd))
+                self.resolved_colors = json.loads(subprocess.check_output(cmd).decode('ascii').strip())
+            except Exception as e:
+                log.warning("rubiks-color-resolver.py failed")
+                log.exception(e)
+                self.shutdown_robot()
+                return
+
+        else:
+            square_count = len(self.colors.keys())
+            square_count_per_side = int(square_count/6)
+            width = int(sqrt(square_count_per_side))
+            cube = RubiksColorSolverGeneric(width)
+            cube.enter_scan_data(self.colors)
+            cube.crunch_colors()
+            self.resolved_colors = cube.cube_for_json()
 
         self.resolved_colors['squares'] = convert_key_strings_to_int(self.resolved_colors['squares'])
         self.cube_for_resolver = self.resolved_colors['kociemba']
 
         log.info("Final Colors: %s" % self.cube_for_resolver)
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
-                    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
+                 (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
     def move_north_to_top(self, rows=1):
         log.info("move_north_to_top() - flipper_at_init %s" % self.flipper_at_init)
@@ -1077,8 +1140,8 @@ class CraneCuber3x3x3(object):
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, rows_and_cols=2, size_mm=40):
-        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, rows_and_cols=2, size_mm=40):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 40mm 2x2x2 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
@@ -1111,8 +1174,8 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
 class CraneCuber4x4x4(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, rows_and_cols=4, size_mm=62):
-        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, rows_and_cols=4, size_mm=62):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
         # 60 is perfect for clockwise
@@ -1145,8 +1208,8 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
 
 class CraneCuber5x5x5(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, rows_and_cols=5, size_mm=63):
-        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, rows_and_cols=5, size_mm=63):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 52
@@ -1247,8 +1310,8 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
 
 class CraneCuber6x6x6(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, rows_and_cols=6, size_mm=67):
-        CraneCuber3x3x3.__init__(self, SERVER, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, rows_and_cols=6, size_mm=67):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 67mm 6x6x6 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 29
@@ -1262,14 +1325,19 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
 
 if __name__ == '__main__':
 
-    # logging.basicConfig(filename='rubiks.log',
-    logging.basicConfig(level=logging.INFO,
+    # logging.basicConfig(level=logging.INFO,
+    logging.basicConfig(filename='/tmp/cranecuber.log',
+                        level=logging.INFO,
                         format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
     log = logging.getLogger(__name__)
 
     # Color the errors and warnings in red
     logging.addLevelName(logging.ERROR, "\033[91m   %s\033[0m" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.WARNING, "\033[91m %s\033[0m" % logging.getLevelName(logging.WARNING))
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--emulate', action='store_true', default=False, help='Run in emulator mode')
+    args = parser.parse_args()
 
     server_conf = "server.conf"
     SERVER = None
@@ -1299,7 +1367,7 @@ if __name__ == '__main__':
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
     #cc = CraneCuber4x4x4(SERVER)
-    cc = CraneCuber3x3x3(SERVER)
+    cc = CraneCuber3x3x3(SERVER, args.emulate)
     cc.init_motors()
     cc.test_foo()
     cc.shutdown_robot()
@@ -1310,7 +1378,7 @@ if __name__ == '__main__':
     try:
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
-            cc = CraneCuber3x3x3(SERVER)
+            cc = CraneCuber3x3x3(SERVER, args.emulate)
             cc.init_motors()
             cc.wait_for_touch_sensor()
             cc.scan()
@@ -1328,15 +1396,15 @@ if __name__ == '__main__':
             size = int(math.sqrt(squares_per_side))
 
             if size == 2:
-                cc = CraneCuber2x2x2(SERVER)
+                cc = CraneCuber2x2x2(SERVER, args.emulate)
             elif size == 3:
-                cc = CraneCuber3x3x3(SERVER)
+                cc = CraneCuber3x3x3(SERVER, args.emulate)
             elif size == 4:
-                cc = CraneCuber4x4x4(SERVER)
+                cc = CraneCuber4x4x4(SERVER, args.emulate)
             elif size == 5:
-                cc = CraneCuber5x5x5(SERVER)
+                cc = CraneCuber5x5x5(SERVER, args.emulate)
             elif size == 6:
-                cc = CraneCuber6x6x6(SERVER)
+                cc = CraneCuber6x6x6(SERVER, args.emulate)
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
@@ -1344,7 +1412,7 @@ if __name__ == '__main__':
             cc.resolve_colors()
             cc.resolve_actions()
 
-            if cc.shutdown:
+            if cc.shutdown or args.emulate:
                 break
 
         cc.shutdown_robot()
