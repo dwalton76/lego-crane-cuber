@@ -13,6 +13,7 @@ from pprint import pformat
 from time import sleep
 from threading import Thread, Event
 import argparse
+import curses
 import datetime
 import json
 import logging
@@ -120,13 +121,14 @@ class DummySensor(object):
 
 class CraneCuber3x3x3(object):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=3, size_mm=57):
+    def __init__(self, SERVER, emulate, screen, rows_and_cols=3, size_mm=57):
         self.SERVER = SERVER
+        self.emulate = emulate
+        self.screen = screen
         self.shutdown = False
         self.rows_and_cols = rows_and_cols
         self.size_mm = size_mm
         self.square_size_mm = float(self.size_mm / self.rows_and_cols)
-        self.emulate = emulate
 
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
@@ -1140,8 +1142,8 @@ class CraneCuber3x3x3(object):
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=2, size_mm=40):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, screen, rows_and_cols=2, size_mm=40):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, screen, rows_and_cols, size_mm)
 
         # These are for a 40mm 2x2x2 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
@@ -1174,8 +1176,8 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
 class CraneCuber4x4x4(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=4, size_mm=62):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, screen, rows_and_cols=4, size_mm=62):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, screen, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
         # 60 is perfect for clockwise
@@ -1208,8 +1210,8 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
 
 class CraneCuber5x5x5(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=5, size_mm=63):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, screen, rows_and_cols=5, size_mm=63):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, screen, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 52
@@ -1310,8 +1312,8 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
 
 class CraneCuber6x6x6(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=6, size_mm=67):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, sceen, rows_and_cols=6, size_mm=67):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, screen, rows_and_cols, size_mm)
 
         # These are for a 67mm 6x6x6 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 29
@@ -1367,7 +1369,7 @@ if __name__ == '__main__':
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
     #cc = CraneCuber4x4x4(SERVER)
-    cc = CraneCuber3x3x3(SERVER, args.emulate)
+    cc = CraneCuber3x3x3(SERVER, args.emulate, screen)
     cc.init_motors()
     cc.test_foo()
     cc.shutdown_robot()
@@ -1375,10 +1377,18 @@ if __name__ == '__main__':
     '''
     cc = None
 
+    # curses
+    begin_x = 0
+    begin_y = 0
+    height = 5
+    width = 40
+    screen = curses.initscr()
+    win = curses.newwin(height, width, begin_y, begin_x)
+
     try:
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
-            cc = CraneCuber3x3x3(SERVER, args.emulate)
+            cc = CraneCuber3x3x3(SERVER, args.emulate, screen)
             cc.init_motors()
             cc.wait_for_touch_sensor()
             cc.scan()
@@ -1396,15 +1406,15 @@ if __name__ == '__main__':
             size = int(math.sqrt(squares_per_side))
 
             if size == 2:
-                cc = CraneCuber2x2x2(SERVER, args.emulate)
+                cc = CraneCuber2x2x2(SERVER, args.emulate, screen)
             elif size == 3:
-                cc = CraneCuber3x3x3(SERVER, args.emulate)
+                cc = CraneCuber3x3x3(SERVER, args.emulate, screen)
             elif size == 4:
-                cc = CraneCuber4x4x4(SERVER, args.emulate)
+                cc = CraneCuber4x4x4(SERVER, args.emulate, screen)
             elif size == 5:
-                cc = CraneCuber5x5x5(SERVER, args.emulate)
+                cc = CraneCuber5x5x5(SERVER, args.emulate, screen)
             elif size == 6:
-                cc = CraneCuber6x6x6(SERVER, args.emulate)
+                cc = CraneCuber6x6x6(SERVER, args.emulate, screen)
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
