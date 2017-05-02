@@ -10,8 +10,15 @@ from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, M
 from rubikscolorresolver import RubiksColorSolverGeneric
 from math import pi, sqrt
 from pprint import pformat
+from rubikscubennnsolver.RubiksCube222 import RubiksCube222
+from rubikscubennnsolver.RubiksCube333 import RubiksCube333
+from rubikscubennnsolver.RubiksCube444 import RubiksCube444
+from rubikscubennnsolver.RubiksCube555 import RubiksCube555
+from rubikscubennnsolver.RubiksCube666 import RubiksCube666
+from rubikscubennnsolver.RubiksCube777 import RubiksCube777
 from time import sleep
 from threading import Thread, Event
+from time import sleep
 import argparse
 import datetime
 import json
@@ -675,16 +682,17 @@ class CraneCuber3x3x3(object):
             # There isn't opencv support in python3 yet so this has to remain a subprocess call for now
             cmd = 'rubiks-cube-tracker.py --directory /tmp/'
 
+        output = ''
         try:
             log.info(cmd)
-            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=True).decode('ascii').strip()
+            output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+            self.colors = json.loads(output)
         except Exception as e:
-            log.warning("rubiks-cube-tracker.py failed")
+            log.warning("rubiks-cube-tracker.py failed:")
+            log.warning(output)
             log.exception(e)
             self.shutdown_robot()
             return
-
-        self.colors = json.loads(output)
 
     def resolve_colors(self):
 
@@ -834,6 +842,20 @@ class CraneCuber3x3x3(object):
         self.time_elevate = 0
         self.time_flip = 0
         self.time_rotate = 0
+        debug = False
+
+        if self.rows_and_cols == 2:
+            cube_for_screen = RubiksCube222(self.cube_for_resolver, debug)
+        elif self.rows_and_cols == 3:
+            cube_for_screen = RubiksCube333(self.cube_for_resolver, debug)
+        elif self.rows_and_cols == 4:
+            cube_for_screen = RubiksCube444(self.cube_for_resolver, debug)
+        elif self.rows_and_cols == 5:
+            cube_for_screen = RubiksCube555(self.cube_for_resolver, debug)
+        elif self.rows_and_cols == 6:
+            cube_for_screen = RubiksCube666(self.cube_for_resolver, debug)
+        elif self.rows_and_cols == 7:
+            cube_for_screen = RubiksCube777(self.cube_for_resolver, debug)
 
         # If use_shortcut is True and we do back-to-back set of moves on opposite
         # faces (like "F B") do not bother flipping the cube around to make B face
@@ -849,7 +871,13 @@ class CraneCuber3x3x3(object):
             use_shortcut = False
 
         for (index, action) in enumerate(actions):
-            desc = "Move %d/%d: %s" % (index, total_actions, action)
+            os.system('clear')
+            print("Phase     : %s" % cube_for_screen.phase())
+            desc = "Move %d/%d : %s" % (index, total_actions, action)
+            print(desc)
+            cube_for_screen.rotate(action)
+            cube_for_screen.print_cube()
+
             log.info(desc)
             #log.info("Up %s, Down %s, North %s, West %s, South %s, East %s" %
             #        (self.facing_up, self.facing_down, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
@@ -958,6 +986,9 @@ class CraneCuber3x3x3(object):
             self.rotate(clockwise, quarter_turns)
             log.info("\n\n\n\n")
             moves += 1
+
+            if self.emulate:
+                sleep(1)
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -1325,9 +1356,9 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
 
 if __name__ == '__main__':
 
-    # logging.basicConfig(level=logging.INFO,
-    logging.basicConfig(filename='/tmp/cranecuber.log',
-                        level=logging.INFO,
+    #logging.basicConfig(filename='/tmp/cranecuber.log',
+    #                    level=logging.INFO,
+    logging.basicConfig(level=logging.WARNING,
                         format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
     log = logging.getLogger(__name__)
 
