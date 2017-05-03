@@ -25,6 +25,7 @@ import json
 import logging
 import math
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -35,7 +36,7 @@ log = logging.getLogger(__name__)
 # positive moves to init position
 # negative moves towards camera
 # This should be 90 degrees but some extra is needed to account for play between the gears
-FLIPPER_DEGREES = -140
+FLIPPER_DEGREES = -130
 FLIPPER_SPEED = 300
 
 # The gear ratio is 1:2.333
@@ -225,6 +226,7 @@ class CraneCuber3x3x3(object):
 
     def wait_for_touch_sensor(self):
         log.info('waiting for TouchSensor press')
+        print('waiting for TouchSensor press')
 
         while True:
             if self.shutdown:
@@ -903,13 +905,20 @@ class CraneCuber3x3x3(object):
             else:
                 quarter_turns = 1
 
-            target_face = action[0]
+            re_number_side_w = re.search('^(\d+)(\w+)w', action)
+            re_side_w = re.search('^(\w+)w', action)
             direction = None
 
-            # The 4x4x4 java solver is the only one that uses this notation
-            if 'w' in action:
+            if re_number_side_w:
+                rows = re_number_side_w.group(1)
+                target_face = re_number_side_w.group(2)
+
+            elif re_side_w:
                 rows = 2
+                target_face = re_side_w.group(1)
+
             else:
+                target_face = action[0]
                 rows = 1
 
             if self.facing_up == 'U':
@@ -1033,16 +1042,25 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
+        # dwalton update this for the SERVER scenario
         if self.SERVER:
             cmd = 'ssh robot@%s "kociemba %s"' % (self.SERVER, self.cube_for_resolver)
         else:
-            cmd = 'kociemba %s' % self.cube_for_resolver
+            cmd = 'cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s' % ''.join(self.cube_for_resolver)
 
         log.info(cmd)
         output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
-        actions = output.split()
-        self.run_actions(actions)
+        actions = []
 
+        for line in output.splitlines():
+            line = line.strip()
+            re_solution = re.search('^Solution:\s+(.*)$', line)
+
+            if re_solution:
+                actions = re_solution.group(1).strip().split()
+                break
+
+        self.run_actions(actions)
         self.elevate(0)
 
         if not self.flipper_at_init:
@@ -1180,28 +1198,6 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
         self.rows_in_turntable_to_count_as_face_turn = 2
 
-    def resolve_actions(self):
-
-        if self.shutdown:
-            return
-
-        if self.SERVER:
-            cmd = 'ssh robot@%s rubiks_2x2x2_solver.py "%s"' % (self.SERVER, ''.join(self.cube_for_resolver))
-        else:
-            cmd = 'rubiks_2x2x2_solver.py "%s"' % ''.join(self.cube_for_resolver)
-
-        log.info(cmd)
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
-
-        if output != 'Cube is already solved':
-            actions = output.strip().split()
-            self.run_actions(actions)
-
-        self.elevate(0)
-
-        if not self.flipper_at_init:
-            self.flip()
-
 
 class CraneCuber4x4x4(CraneCuber3x3x3):
 
@@ -1215,27 +1211,6 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 4
 
-    def resolve_actions(self):
-
-        if self.shutdown:
-            return
-
-        if self.SERVER:
-            cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s'" % (self.SERVER, ''.join(self.cube_for_resolver))
-        else:
-            cmd = "cd /home/robot/rubiks-cube-solvers/4x4x4/TPR-4x4x4-Solver && java -cp .:threephase.jar:twophase.jar solver %s" % ''.join(self.cube_for_resolver)
-
-        log.info(cmd)
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()[-1].strip()
-
-        actions = output.split()
-        self.run_actions(actions)
-
-        self.elevate(0)
-
-        if not self.flipper_at_init:
-            self.flip()
-
 
 class CraneCuber5x5x5(CraneCuber3x3x3):
 
@@ -1247,96 +1222,6 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 3
-
-    def resolve_actions(self):
-
-        if self.shutdown:
-            return
-
-        # The self.cube_for_resolver order is U L F R B D but the 5x5x5 solver needs U R L B F D order
-        cube_string = (self.cube_for_resolver[0:25] +    # U
-                       self.cube_for_resolver[75:100] +  # R
-                       self.cube_for_resolver[25:50] +   # L
-                       self.cube_for_resolver[100:125] + # B
-                       self.cube_for_resolver[50:75] +   # F
-                       self.cube_for_resolver[125:150])  # D
-        cube_string = ''.join(cube_string)
-        log.info("cube string for 5x5x5 reducer %s" % cube_string)
-
-        if self.SERVER:
-            cmd = "ssh robot@%s 'cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s'" % (self.SERVER, cube_string)
-        else:
-            cmd = "cd /home/robot/rubiks-cube-solvers/5x5x5/ && java -cp bin -Xmx4g justsomerandompackagename.reducer %s" % cube_string
-
-        log.info(cmd)
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').splitlines()
-        '''
-        The 5x5x5 reducer will produce the following in the very last lines of output:
-
-        All Moves (106 total) - Rw Uw Rw Bw Rw Rw F F Uw Uw Bw Rw Lw Lw Dw Dw B B B Uw Uw Uw Dw L Rw Rw Lw Lw Dw U U U F Rw Rw Uw Uw F F F Dw Dw F F F Uw Uw B B Uw Uw Bw Bw Rw Rw Uw Uw L D D D L D D D F F U Lw Lw D L U U U Bw Bw Lw Lw U Bw Bw U U U F F Fw Fw U U U Rw Rw D Bw Bw U L L F F Bw Bw Rw Rw
-        U - LUUURDUUUUDUUUUDUUUUDDDDB
-        D - UDDDUBDDDUBDDDUBDDDUBFFFU
-        R - LLLLBLRRRRLRRRRLRRRRFFFFL
-        L - FLLLRRLLLBRLLLBRLLLBRRRRF
-        F - FBBBDUFFFBUFFFBUFFFBLFFFR
-        B - URRRDFBBBDFBBBDFBBBDBLLLD
-        '''
-        found_all_moves = False
-        tmp = {}
-        for line in output:
-            line = line.strip()
-            if line.startswith("All Moves"):
-                found_all_moves = True
-                actions = line.split(' - ')[1].strip()
-                log.info("5x5x5 -> 3x3x3 reduction moves %s" % actions)
-            elif found_all_moves:
-                if '-' in line:
-                    log.info("5x5x5 -> 3x3x3 state: %s" % line)
-                    (side_name, squares) = line.split('-')
-                    side_name = side_name.strip()
-                    squares = squares.strip()
-                    '''
-                    Example:
-                    U - LUUURDUUUUDUUUUDUUUUDDDDB
-
-                    The cube has been reduced to a 3x3x3 so we want the
-                    corners, the middle of each edge and the center square
-
-                    LUUUR
-                    DUUUU
-                    DUUUU
-                    DUUUU
-                    DDDDB
-                    '''
-                    tmp[side_name] = squares[0] + squares[2] + squares[4] + squares[10] + squares[12] + squares[14] + squares[20] + squares[22] + squares[24]
-
-        # kociemba uses order U R F D L B
-        cube_string_for_3x3x3 = tmp['U'] + tmp['R'] + tmp['F'] + tmp['D'] + tmp['L'] + tmp['B']
-        log.info("tmp U %s" % tmp['U'])
-        log.info("tmp R %s" % tmp['R'])
-        log.info("tmp F %s" % tmp['F'])
-        log.info("tmp D %s" % tmp['D'])
-        log.info("tmp L %s" % tmp['L'])
-        log.info("tmp B %s" % tmp['B'])
-        log.info("cube_string_for_3x3x3 %s" % cube_string_for_3x3x3)
-
-        # The only reason we cd to the directory here is so the cache dir is in the same place each time
-        if self.SERVER:
-            cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s"' % (self.SERVER, cube_string_for_3x3x3)
-        else:
-            cmd = 'cd /home/robot/rubiks-cube-solvers/3x3x3/ && kociemba %s' % cube_string_for_3x3x3
-
-        log.info(cmd)
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
-
-        kociemba_actions = output.strip()
-        actions += ' ' + kociemba_actions
-        actions = self.compress_actions(actions).split()
-        self.run_actions(actions)
-        self.elevate(0)
-
-        if not self.flipper_at_init:
-            self.flip()
 
 
 class CraneCuber6x6x6(CraneCuber3x3x3):
@@ -1350,15 +1235,12 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 6
 
-    def resolve_actions(self):
-        raise Exception("No solver available for 6x6x6")
-
 
 if __name__ == '__main__':
 
     #logging.basicConfig(filename='/tmp/cranecuber.log',
     #                    level=logging.INFO,
-    logging.basicConfig(level=logging.WARNING,
+    logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
     log = logging.getLogger(__name__)
 
