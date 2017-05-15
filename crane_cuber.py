@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 
 # This should be 90 degrees but some extra is needed to account for
 # play between the gears
-FLIPPER_DEGREES = -130
+FLIPPER_DEGREES = -125
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -640,19 +640,22 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        #self.flip_settle_cube()
+        if self.rows_and_cols >= 6:
+            self.flip_settle_cube()
         self.scan_face('R')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        #self.flip_settle_cube()
+        if self.rows_and_cols >= 6:
+            self.flip_settle_cube()
         self.scan_face('B')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        #self.flip_settle_cube()
+        if self.rows_and_cols >= 6:
+            self.flip_settle_cube()
         self.scan_face('L')
 
         # expose the 'D' side, then raise the cube so we can get the flipper out
@@ -668,7 +671,8 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
-        #self.flip_settle_cube()
+        if self.rows_and_cols >= 6:
+            self.flip_settle_cube()
         self.scan_face('U')
 
         # To make troubleshooting easier, move the F of the cube so that it
@@ -678,7 +682,8 @@ class CraneCuber3x3x3(object):
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
-        #self.flip_settle_cube()
+        if self.rows_and_cols >= 6:
+            self.flip_settle_cube()
 
     def get_colors(self):
 
@@ -698,6 +703,7 @@ class CraneCuber3x3x3(object):
         try:
             log.info(cmd)
             output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+            log.info(output)
             self.colors = json.loads(output)
         except Exception as e:
             log.warning("rubiks-cube-tracker.py failed:")
@@ -711,7 +717,7 @@ class CraneCuber3x3x3(object):
         if self.shutdown:
             return
 
-        log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
+        # log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
         # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
 
         if self.SERVER:
@@ -719,25 +725,20 @@ class CraneCuber3x3x3(object):
                    'robot@%s' % self.SERVER,
                    'rubiks-color-resolver.py',
                    '--json',
-                   "'%s'" % json.dumps(self.colors)]
-
-            try:
-                log.info(' '.join(cmd))
-                self.resolved_colors = json.loads(subprocess.check_output(cmd).decode('ascii').strip())
-            except Exception as e:
-                log.warning("rubiks-color-resolver.py failed")
-                log.exception(e)
-                self.shutdown_robot()
-                return
-
+                   '%s' % json.dumps(self.colors)]
         else:
-            square_count = len(self.colors.keys())
-            square_count_per_side = int(square_count/6)
-            width = int(sqrt(square_count_per_side))
-            cube = RubiksColorSolverGeneric(width)
-            cube.enter_scan_data(self.colors)
-            cube.crunch_colors()
-            self.resolved_colors = cube.cube_for_json()
+            cmd = ['rubiks-color-resolver.py',
+                   '--json',
+                   '%s' % json.dumps(self.colors)]
+
+        try:
+            log.info(' '.join(cmd))
+            self.resolved_colors = json.loads(subprocess.check_output(cmd).decode('ascii').strip())
+        except Exception as e:
+            log.warning("rubiks-color-resolver.py failed")
+            log.exception(e)
+            self.shutdown_robot()
+            return
 
         self.resolved_colors['squares'] = convert_key_strings_to_int(self.resolved_colors['squares'])
         self.cube_for_resolver = self.resolved_colors['kociemba']
@@ -1230,8 +1231,7 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
-        # 60 is perfect for clockwise
-        self.TURN_BLOCKED_TOUCH_DEGREES = 65
+        self.TURN_BLOCKED_TOUCH_DEGREES = 64
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 20
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
         self.rows_in_turntable_to_count_as_face_turn = 4
@@ -1259,6 +1259,8 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         # If you drop a 6x6x6 too fast the weight of it will eventually work
         # the pins loose that hold the flipper
         self.ELEVATOR_SPEED_DOWN_FAST = 600
+
+        self.FLIPPER_SPEED = 200
 
         # These are for a 67mm 6x6x6 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 29
@@ -1321,8 +1323,8 @@ if __name__ == '__main__':
 
     try:
         while True:
-            # Size doesn't matter for scanning so use a CraneCuber6x6x6 object since it is the most conservative in terms of speed
-            cc = CraneCuber6x6x6(SERVER, args.emulate)
+            # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
+            cc = CraneCuber3x3x3(SERVER, args.emulate)
             cc.init_motors()
             cc.wait_for_touch_sensor()
             cc.scan()
