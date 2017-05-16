@@ -640,21 +640,21 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        if self.rows_and_cols >= 6:
+        if True or self.rows_and_cols >= 6:
             self.flip_settle_cube()
         self.scan_face('R')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        if self.rows_and_cols >= 6:
+        if True or self.rows_and_cols >= 6:
             self.flip_settle_cube()
         self.scan_face('B')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        if self.rows_and_cols >= 6:
+        if True or self.rows_and_cols >= 6:
             self.flip_settle_cube()
         self.scan_face('L')
 
@@ -671,7 +671,7 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
-        if self.rows_and_cols >= 6:
+        if True or self.rows_and_cols >= 6:
             self.flip_settle_cube()
         self.scan_face('U')
 
@@ -682,7 +682,7 @@ class CraneCuber3x3x3(object):
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
-        if self.rows_and_cols >= 6:
+        if True or self.rows_and_cols >= 6:
             self.flip_settle_cube()
 
     def get_colors(self):
