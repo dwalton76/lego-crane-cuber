@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 
 # This should be 90 degrees but some extra is needed to account for
 # play between the gears
-FLIPPER_DEGREES = -125
+FLIPPER_DEGREES = -130
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -1217,6 +1217,14 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
     def __init__(self, SERVER, emulate, rows_and_cols=2, size_mm=40):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
+        # The 2x2x2 is so light it tends to get knocked around if we raise and lower it too fast
+        # positive moves down
+        # negative moves up
+        self.ELEVATOR_SPEED_UP_FAST = 600
+        self.ELEVATOR_SPEED_UP_SLOW = 600
+        self.ELEVATOR_SPEED_DOWN_FAST = 600
+        self.ELEVATOR_SPEED_DOWN_SLOW = 600
+
         # These are for a 40mm 2x2x2 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 77
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
@@ -1324,7 +1332,7 @@ if __name__ == '__main__':
     try:
         while True:
             # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
-            cc = CraneCuber3x3x3(SERVER, args.emulate)
+            cc = CraneCuber2x2x2(SERVER, args.emulate)
             cc.init_motors()
             cc.wait_for_touch_sensor()
             cc.scan()
