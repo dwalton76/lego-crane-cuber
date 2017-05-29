@@ -1342,6 +1342,9 @@ if __name__ == '__main__':
 
             # Take a pic of the first side to get the size of the cube so we can create the appropriate object
             png_filename = cc.scan_face('F')
+            F_in_ascii = subprocess.check_output(['./utils/pic_to_ascii.py', png_filename]).decode('ascii')
+            log.info("\n\n" + F_in_ascii + "\n\n")
+
             cmd = 'rubiks-cube-tracker.py --filename %s' % png_filename
             colors_for_F = json.loads(subprocess.check_output(cmd, shell=True).decode('ascii').strip())
             size = int(sqrt(len(colors_for_F.keys())))
