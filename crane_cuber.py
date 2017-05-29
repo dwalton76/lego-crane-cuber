@@ -602,7 +602,7 @@ class CraneCuber3x3x3(object):
             os.unlink(png_filename)
 
         if self.emulate:
-            shutil.copy('/home/dwalton/lego/rubiks-cube-tracker/test/test-data/3x3x3-random-01/rubiks-side-%s.png' % name, '/tmp/')
+            shutil.copy('/home/dwalton/lego/rubiks-cube-tracker/test/test-data/3x3x3-random-01/rubiks-side-%s.png' % name, png_filename)
         else:
             # capture a single png from the webcam
             cmd = ['fswebcam',
@@ -626,7 +626,8 @@ class CraneCuber3x3x3(object):
 
         if not os.path.exists(png_filename):
             self.shutdown = True
-            return
+
+        return png_filename
 
     def scan(self):
 
@@ -635,7 +636,9 @@ class CraneCuber3x3x3(object):
 
         log.info("scan()")
         self.colors = {}
-        self.scan_face('F')
+
+        # We already took a pic of side F
+        # self.scan_face('F')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
@@ -1331,28 +1334,22 @@ if __name__ == '__main__':
 
     try:
         while True:
-            # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
-            cc = CraneCuber2x2x2(SERVER, args.emulate)
+
+            # We can use any CraneCuber object to take a pic of side F to figure out the cube size
+            cc = CraneCuber3x3x3(SERVER, args.emulate)
             cc.init_motors()
             cc.wait_for_touch_sensor()
-            cc.scan()
-            cc.get_colors()
 
-            if cc.shutdown:
-                break
-
-            # We have scanned all sides and know how many squares there are, use
-            # this to create an object of the appropriate class
-            #
-            # cc.colors is a dict where the square_index is the key and the RGB is the value
-            colors = deepcopy(cc.colors)
-            squares_per_side = len(colors.keys()) / 6
-            size = int(math.sqrt(squares_per_side))
+            # Take a pic of the first side to get the size of the cube so we can create the appropriate object
+            png_filename = cc.scan_face('F')
+            cmd = 'rubiks-cube-tracker.py --filename %s' % png_filename
+            colors_for_F = json.loads(subprocess.check_output(cmd, shell=True).decode('ascii').strip())
+            size = int(sqrt(len(colors_for_F.keys())))
 
             if size == 2:
                 cc = CraneCuber2x2x2(SERVER, args.emulate)
             elif size == 3:
-                cc = CraneCuber3x3x3(SERVER, args.emulate)
+                pass
             elif size == 4:
                 cc = CraneCuber4x4x4(SERVER, args.emulate)
             elif size == 5:
@@ -1362,7 +1359,8 @@ if __name__ == '__main__':
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
-            cc.colors = colors
+            cc.scan()
+            cc.get_colors()
             cc.resolve_colors()
             cc.resolve_actions()
 
@@ -1378,4 +1376,3 @@ if __name__ == '__main__':
             cc.shutdown_robot()
 
         sys.exit(1)
-
