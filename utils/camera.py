@@ -1,8 +1,12 @@
 #!/usr/bin/python
-'''
-    Author: Igor Maculan - n3wtron@gmail.com
-    A Simple mjpg stream http server
-'''
+
+"""
+Author: Igor Maculan - n3wtron@gmail.com
+A Simple mjpg stream http server
+
+https://gist.github.com/n3wtron/4624820
+"""
+
 import cv2
 import Image
 import threading

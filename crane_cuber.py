@@ -159,9 +159,14 @@ class CraneCuber3x3x3(object):
 
         # positive is clockwise
         # negative is counter clockwise
-        self.TURNTABLE_SPEED_NORMAL = 1050
-        self.TURNTABLE_SPEED_EXACT = 600
-        self.TURNTABLE_SPEED_FREE = 800
+        #self.TURNTABLE_SPEED_NORMAL = 1050
+        #self.TURNTABLE_SPEED_EXACT = 600
+        #self.TURNTABLE_SPEED_FREE = 800
+
+        # Slow down for more accuracy
+        self.TURNTABLE_SPEED_NORMAL = 400
+        self.TURNTABLE_SPEED_EXACT = 400
+        self.TURNTABLE_SPEED_FREE = 600
 
         # positive moves down
         # negative moves up
@@ -171,9 +176,9 @@ class CraneCuber3x3x3(object):
         self.ELEVATOR_SPEED_DOWN_SLOW = 1050
 
         # These numbers are for a 57mm 3x3x3 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 112
+        self.TURN_BLOCKED_TOUCH_DEGREES = 107
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -150
         self.rows_in_turntable_to_count_as_face_turn = 2
 
     def init_motors(self):
@@ -381,6 +386,10 @@ class CraneCuber3x3x3(object):
                                     stop_action='hold')
         self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
+
+    def flip_to_init(self):
+        if self.flipper.position >= 10:
+            self.flip()
 
     def flip(self):
 
@@ -1087,9 +1096,10 @@ class CraneCuber3x3x3(object):
             self.flip()
 
     def test_foo(self):
-        #foo = ("U", "Uw", "Dw", "D")
-        foo = ("U'", "D'")
+        foo = ("U", )
+        #foo = ("U'", )
         self.run_actions(foo)
+        self.flip_to_init()
 
     def test_basics(self):
         """
@@ -1209,7 +1219,7 @@ class CraneCuber3x3x3(object):
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=2, size_mm=40):
+    def __init__(self, SERVER, emulate, rows_and_cols=2, size_mm=55):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # The 2x2x2 is so light it tends to get knocked around if we raise and lower it too fast
@@ -1221,9 +1231,15 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         self.ELEVATOR_SPEED_DOWN_SLOW = 600
 
         # These are for a 40mm 2x2x2 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 77
+        #self.TURN_BLOCKED_TOUCH_DEGREES = 77
+        #self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
+        #self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
+
+        # These are for a 55mm 2x2x2 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 135
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -195
+
         self.rows_in_turntable_to_count_as_face_turn = 2
         log.warning("Using CraneCuber2x2x2, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
@@ -1234,9 +1250,9 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 64
+        self.TURN_BLOCKED_TOUCH_DEGREES = 58
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 20
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -77
         self.rows_in_turntable_to_count_as_face_turn = 4
         log.warning("Using CraneCuber4x4x4, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
@@ -1247,9 +1263,9 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 52
+        self.TURN_BLOCKED_TOUCH_DEGREES = 50
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -70
         self.rows_in_turntable_to_count_as_face_turn = 3
         log.warning("Using CraneCuber5x5x5, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
@@ -1266,9 +1282,9 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.FLIPPER_SPEED = 200
 
         # These are for a 67mm 6x6x6 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 29
+        self.TURN_BLOCKED_TOUCH_DEGREES = 32
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = (-1 * self.TURN_BLOCKED_TOUCH_DEGREES) - self.TURN_BLOCKED_SQUARE_TT_DEGREES
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -45
         self.rows_in_turntable_to_count_as_face_turn = 6
 
 
@@ -1356,8 +1372,11 @@ if __name__ == '__main__':
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
-    #cc = CraneCuber4x4x4(SERVER)
-    cc = CraneCuber3x3x3(SERVER, args.emulate)
+    #cc = CraneCuber2x2x2(SERVER, args.emulate)
+    #cc = CraneCuber3x3x3(SERVER, args.emulate)
+    #cc = CraneCuber4x4x4(SERVER, args.emulate)
+    #cc = CraneCuber5x5x5(SERVER, args.emulate)
+    cc = CraneCuber6x6x6(SERVER, args.emulate)
     cc.init_motors()
     cc.test_foo()
     cc.shutdown_robot()
