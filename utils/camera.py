@@ -50,6 +50,7 @@ class CamHandler(BaseHTTPRequestHandler):
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
 
+
 def main():
     global capture
     capture = cv2.VideoCapture(0)
@@ -57,13 +58,15 @@ def main():
     capture.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240);
     capture.set(cv2.cv.CV_CAP_PROP_SATURATION,0.2);
     global img
+
     try:
         server = ThreadedHTTPServer(('0.0.0.0', 8080), CamHandler)
         print "server started on port 8080"
         server.serve_forever()
-    except KeyboardInterrupt:
+    except Exception:
         capture.release()
         server.socket.close()
+
 
 if __name__ == '__main__':
     main()

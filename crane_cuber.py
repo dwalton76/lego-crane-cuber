@@ -117,12 +117,14 @@ class CraneCuber3x3x3(object):
 
     def __init__(self, SERVER, emulate, rows_and_cols=3, size_mm=57):
         self.SERVER = SERVER
-        self.shutdown = False
+        self.shutdown_event = Event()
         self.rows_and_cols = rows_and_cols
         self.size_mm = size_mm
         self.square_size_mm = float(self.size_mm / self.rows_and_cols)
         self.emulate = emulate
         self.cube_for_resolver = None
+        self.mts = None
+        self.waiting_for_touch_sensor = Event()
 
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
@@ -207,8 +209,12 @@ class CraneCuber3x3x3(object):
 
     def shutdown_robot(self):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
+
+        if self.mts:
+            log.info('shutting down mts')
+            self.mts.shutdown_event.set()
 
         log.info('shutting down')
         self.elevate(0)
@@ -219,7 +225,7 @@ class CraneCuber3x3x3(object):
         for x in self.motors:
             x.stop(stop_action='brake')
 
-        self.shutdown = True
+        self.shutdown_event.set()
 
     def signal_term_handler(self, signal, frame):
         log.error('Caught SIGTERM')
@@ -228,20 +234,6 @@ class CraneCuber3x3x3(object):
     def signal_int_handler(self, signal, frame):
         log.error('Caught SIGINT')
         self.shutdown_robot()
-
-    def wait_for_touch_sensor(self):
-        log.info('waiting for TouchSensor press')
-        print('waiting for TouchSensor press')
-
-        while True:
-            if self.shutdown:
-                break
-
-            if self.touch_sensor.is_pressed:
-                log.info('TouchSensor pressed')
-                break
-
-            sleep(0.01)
 
     def _rotate(self, final_pos, exact=False):
 
@@ -275,7 +267,7 @@ class CraneCuber3x3x3(object):
 
     def rotate(self, clockwise, quarter_turns):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         assert quarter_turns > 0 and quarter_turns <= 2, "quarter_turns is %d, it must be between 0 and 2" % quarter_turns
@@ -371,7 +363,7 @@ class CraneCuber3x3x3(object):
         have slid forward too far.
         """
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
@@ -392,7 +384,7 @@ class CraneCuber3x3x3(object):
 
     def flip(self):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         current_pos = self.flipper.position
@@ -504,7 +496,7 @@ class CraneCuber3x3x3(object):
         """
         assert rows >= 0 and rows <= self.rows_and_cols, "rows was %d, rows must be between 0 and %d" % (rows, self.rows_and_cols)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         # nothing to do
@@ -592,7 +584,7 @@ class CraneCuber3x3x3(object):
 
     def scan_face(self, name):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         log.info("scan_face() %s" % name)
@@ -625,13 +617,13 @@ class CraneCuber3x3x3(object):
             subprocess.call(cmd)
 
         if not os.path.exists(png_filename):
-            self.shutdown = True
+            self.shutdown_robot()
 
         return png_filename
 
     def scan(self):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         log.info("scan()")
@@ -690,7 +682,7 @@ class CraneCuber3x3x3(object):
 
     def get_colors(self):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         if self.SERVER:
@@ -717,7 +709,7 @@ class CraneCuber3x3x3(object):
 
     def resolve_colors(self):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         # log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
@@ -902,7 +894,7 @@ class CraneCuber3x3x3(object):
                 cube_for_screen.print_cube()
                 cube_for_screen.rotate(action)
 
-            if self.shutdown:
+            if self.shutdown_event.is_set():
                 break
 
             if action.startswith('x') or action.startswith('y') or action.startswith('z'):
@@ -1068,7 +1060,7 @@ class CraneCuber3x3x3(object):
 
     def resolve_actions(self):
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         if self.SERVER:
@@ -1107,101 +1099,101 @@ class CraneCuber3x3x3(object):
         input('Press ENTER to flip (to forward)')
         self.flip()
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER to flip (to init)')
         self.flip()
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER rotate 90 degrees clockwise')
         self.rotate(clockwise=True, quarter_turns=1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER rotate 90 degrees counter clockwise')
         self.rotate(clockwise=False, quarter_turns=1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER rotate 180 degrees clockwise')
         self.rotate(clockwise=True, quarter_turns=2)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER rotate 180 degrees counter clockwise')
         self.rotate(clockwise=False, quarter_turns=2)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER elevate to 1 rows')
         self.elevate(1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER elevate to lower')
         self.elevate(0)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER elevate to 2 rows')
         self.elevate(2)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER elevate to max rows')
         self.elevate_max()
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER elevate to 2 rows')
         self.elevate(2)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER elevate to lower')
         self.elevate(0)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER to rotate 1 row clockwise')
         self.elevate(1)
         self.rotate(clockwise=True, quarter_turns=1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER to rotate 1 row counter clockwise')
         self.elevate(1)
         self.rotate(clockwise=False, quarter_turns=1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER to rotate 2 row clockwise')
         self.elevate(2)
         self.rotate(clockwise=True, quarter_turns=1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         input('Press ENTER to rotate 2 row counter clockwise')
         self.elevate(2)
         self.rotate(clockwise=False, quarter_turns=1)
 
-        if self.shutdown:
+        if self.shutdown_event.is_set():
             return
 
         self.elevate(0)
@@ -1280,6 +1272,47 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.rows_in_turntable_to_count_as_face_turn = 6
 
 
+class MonitorTouchSensor(Thread):
+
+    def __init__(self):
+        Thread.__init__(self)
+        self.cc = None
+        self.shutdown_event = Event()
+        self.touch_sensor = TouchSensor()
+        self.waiting_for_release = False
+
+    def __str__(self):
+        return "MonitorTouchSensor"
+
+    def run(self):
+        while True:
+
+            if self.shutdown_event.is_set():
+                log.warning('%s: shutdown_event is set' % self)
+                break
+
+            if self.touch_sensor.is_pressed:
+
+                if not self.waiting_for_release:
+                    self.waiting_for_release = True
+
+                    if self.cc:
+                        if self.cc.waiting_for_touch_sensor.is_set():
+                            log.warning('%s: TouchSensor pressed, clearing cc waiting_for_touch_sensor' % self)
+                            self.cc.waiting_for_touch_sensor.clear()
+                        else:
+                            log.warning('%s: TouchSensor pressed, setting cc shutdown_event' % self)
+                            self.cc.mts = None
+                            self.cc.shutdown_robot()
+                            self.shutdown_event.set()
+            else:
+                if self.waiting_for_release:
+                    self.waiting_for_release = False
+                    log.warning('%s: TouchSensor released' % self)
+
+            sleep(0.01)
+
+
 if __name__ == '__main__':
 
     #logging.basicConfig(filename='/tmp/cranecuber.log',
@@ -1331,43 +1364,56 @@ if __name__ == '__main__':
     sys.exit(0)
     '''
     cc = None
+    mts = MonitorTouchSensor()
+    mts.start()
 
     try:
         while True:
 
             # We can use any CraneCuber object to take a pic of side F to figure out the cube size
             cc = CraneCuber3x3x3(SERVER, args.emulate)
+            mts.cc = cc
+            cc.mts = mts
             cc.init_motors()
-            cc.wait_for_touch_sensor()
+            cc.waiting_for_touch_sensor.set()
+            log.info('waiting for TouchSensor press')
+            print('waiting for TouchSensor press')
 
-            # Take a pic of the first side to get the size of the cube so we can create the appropriate object
-            png_filename = cc.scan_face('F')
-            F_in_ascii = subprocess.check_output(['./utils/pic_to_ascii.py', png_filename]).decode('ascii')
-            log.info("\n\n" + F_in_ascii + "\n\n")
+            while not cc.shutdown_event.is_set() and cc.waiting_for_touch_sensor.is_set():
+                sleep (0.1)
 
-            cmd = 'rubiks-cube-tracker.py --filename %s' % png_filename
-            colors_for_F = json.loads(subprocess.check_output(cmd, shell=True).decode('ascii').strip())
-            size = int(sqrt(len(colors_for_F.keys())))
+            if not cc.shutdown_event.is_set():
 
-            if size == 2:
-                cc = CraneCuber2x2x2(SERVER, args.emulate)
-            elif size == 3:
-                pass
-            elif size == 4:
-                cc = CraneCuber4x4x4(SERVER, args.emulate)
-            elif size == 5:
-                cc = CraneCuber5x5x5(SERVER, args.emulate)
-            elif size == 6:
-                cc = CraneCuber6x6x6(SERVER, args.emulate)
-            else:
-                raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
+                # Take a pic of the first side to get the size of the cube so we can create the appropriate object
+                png_filename = cc.scan_face('F')
+                F_in_ascii = subprocess.check_output(['./utils/pic_to_ascii.py', png_filename]).decode('ascii')
+                log.info("\n\n" + F_in_ascii + "\n\n")
 
-            cc.scan()
-            cc.get_colors()
-            cc.resolve_colors()
-            cc.resolve_actions()
+                cmd = 'rubiks-cube-tracker.py --filename %s' % png_filename
+                colors_for_F = json.loads(subprocess.check_output(cmd, shell=True).decode('ascii').strip())
+                size = int(sqrt(len(colors_for_F.keys())))
 
-            if cc.shutdown or args.emulate:
+                if size == 2:
+                    cc = CraneCuber2x2x2(SERVER, args.emulate)
+                elif size == 3:
+                    pass
+                elif size == 4:
+                    cc = CraneCuber4x4x4(SERVER, args.emulate)
+                elif size == 5:
+                    cc = CraneCuber5x5x5(SERVER, args.emulate)
+                elif size == 6:
+                    cc = CraneCuber6x6x6(SERVER, args.emulate)
+                else:
+                    raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
+
+                mts.cc = cc
+                cc.mts = mts
+                cc.scan()
+                cc.get_colors()
+                cc.resolve_colors()
+                cc.resolve_actions()
+
+            if cc.shutdown_event.is_set() or args.emulate:
                 break
 
         cc.shutdown_robot()
@@ -1375,7 +1421,13 @@ if __name__ == '__main__':
     except Exception as e:
         log.exception(e)
 
+        if mts:
+            mts.shutdown_event.set()
+            mts.join()
+            mts = None
+
         if cc:
+            cc.mts = None
             cc.shutdown_robot()
 
         sys.exit(1)
