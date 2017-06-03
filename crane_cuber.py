@@ -10,12 +10,12 @@ from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, M
 from rubikscolorresolver import RubiksColorSolverGeneric
 from math import pi, sqrt
 from pprint import pformat
-from rubikscubennnsolver.RubiksCube222 import RubiksCube222
-from rubikscubennnsolver.RubiksCube333 import RubiksCube333
-from rubikscubennnsolver.RubiksCube444 import RubiksCube444
-from rubikscubennnsolver.RubiksCube555 import RubiksCube555
-from rubikscubennnsolver.RubiksCube666 import RubiksCube666
-from rubikscubennnsolver.RubiksCube777 import RubiksCube777
+#from rubikscubennnsolver.RubiksCube222 import RubiksCube222
+#from rubikscubennnsolver.RubiksCube333 import RubiksCube333
+#from rubikscubennnsolver.RubiksCube444 import RubiksCube444
+#from rubikscubennnsolver.RubiksCube555 import RubiksCube555
+#from rubikscubennnsolver.RubiksCube666 import RubiksCube666
+#from rubikscubennnsolver.RubiksCube777 import RubiksCube777
 from time import sleep
 from threading import Thread, Event
 from time import sleep
@@ -164,7 +164,7 @@ class CraneCuber3x3x3(object):
         #self.TURNTABLE_SPEED_FREE = 800
 
         # Slow down for more accuracy
-        self.TURNTABLE_SPEED_NORMAL = 400
+        self.TURNTABLE_SPEED_NORMAL = 800
         self.TURNTABLE_SPEED_EXACT = 400
         self.TURNTABLE_SPEED_FREE = 600
 
@@ -514,8 +514,17 @@ class CraneCuber3x3x3(object):
 
         if rows:
             # 16 studs at 8mm per stud = 128mm
-            flipper_plus_holder_height_studs_mm = 130
-            cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
+            flipper_plus_holder_height_studs_mm = 132
+
+            # If we are elevating the cube all the way up to spin it freely give
+            # some extra wiggle room to make sure it is clear of the holder
+            if rows == self.rows_and_cols:
+                flipper_plus_holder_height_studs_mm += 4
+
+            # dwalton
+            # cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
+            cube_rows_height = int(((self.rows_and_cols - rows) * self.square_size_mm) + (self.square_size_mm/2.0))
+
             final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
 
             # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
@@ -623,6 +632,7 @@ class CraneCuber3x3x3(object):
                 cmd.append('270')
 
             cmd.append(png_filename)
+            # log.info(' '.join(cmd))
             subprocess.call(cmd)
 
         if not os.path.exists(png_filename):
@@ -637,29 +647,24 @@ class CraneCuber3x3x3(object):
 
         log.info("scan()")
         self.colors = {}
-
-        # We already took a pic of side F
-        # self.scan_face('F')
+        self.scan_face('F')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        if True or self.rows_and_cols >= 6:
-            self.flip_settle_cube()
+        self.flip_settle_cube()
         self.scan_face('R')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        if True or self.rows_and_cols >= 6:
-            self.flip_settle_cube()
+        self.flip_settle_cube()
         self.scan_face('B')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        if True or self.rows_and_cols >= 6:
-            self.flip_settle_cube()
+        self.flip_settle_cube()
         self.scan_face('L')
 
         # expose the 'D' side, then raise the cube so we can get the flipper out
@@ -675,8 +680,7 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
-        if True or self.rows_and_cols >= 6:
-            self.flip_settle_cube()
+        self.flip_settle_cube()
         self.scan_face('U')
 
         # To make troubleshooting easier, move the F of the cube so that it
@@ -686,8 +690,7 @@ class CraneCuber3x3x3(object):
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
-        if True or self.rows_and_cols >= 6:
-            self.flip_settle_cube()
+        self.flip_settle_cube()
 
     def get_colors(self):
 
@@ -861,21 +864,21 @@ class CraneCuber3x3x3(object):
         self.time_rotate = 0
         debug = False
 
-        if self.cube_for_resolver:
-            if self.rows_and_cols == 2:
-                cube_for_screen = RubiksCube222(self.cube_for_resolver, debug)
-            elif self.rows_and_cols == 3:
-                cube_for_screen = RubiksCube333(self.cube_for_resolver, debug)
-            elif self.rows_and_cols == 4:
-                cube_for_screen = RubiksCube444(self.cube_for_resolver, debug)
-            elif self.rows_and_cols == 5:
-                cube_for_screen = RubiksCube555(self.cube_for_resolver, debug)
-            elif self.rows_and_cols == 6:
-                cube_for_screen = RubiksCube666(self.cube_for_resolver, debug)
-            elif self.rows_and_cols == 7:
-                cube_for_screen = RubiksCube777(self.cube_for_resolver, debug)
-        else:
-            cube_for_screen = None
+        #if self.cube_for_resolver:
+        #    if self.rows_and_cols == 2:
+        #        cube_for_screen = RubiksCube222(self.cube_for_resolver, debug)
+        #    elif self.rows_and_cols == 3:
+        #        cube_for_screen = RubiksCube333(self.cube_for_resolver, debug)
+        #    elif self.rows_and_cols == 4:
+        #        cube_for_screen = RubiksCube444(self.cube_for_resolver, debug)
+        #    elif self.rows_and_cols == 5:
+        #        cube_for_screen = RubiksCube555(self.cube_for_resolver, debug)
+        #    elif self.rows_and_cols == 6:
+        #        cube_for_screen = RubiksCube666(self.cube_for_resolver, debug)
+        #    elif self.rows_and_cols == 7:
+        #        cube_for_screen = RubiksCube777(self.cube_for_resolver, debug)
+        #else:
+        #    cube_for_screen = None
 
         # If use_shortcut is True and we do back-to-back set of moves on opposite
         # faces (like "F B") do not bother flipping the cube around to make B face
@@ -891,17 +894,17 @@ class CraneCuber3x3x3(object):
             use_shortcut = False
 
         for (index, action) in enumerate(actions):
-            os.system('clear')
-            if cube_for_screen:
-                print("Phase     : %s" % cube_for_screen.phase())
+            # os.system('clear')
+            #if cube_for_screen:
+            #    print("Phase     : %s" % cube_for_screen.phase())
 
             desc = "Move %d/%d : %s" % (index, total_actions, action)
             print(desc)
             log.info(desc)
 
-            if cube_for_screen:
-                cube_for_screen.print_cube()
-                cube_for_screen.rotate(action)
+            #if cube_for_screen:
+            #    cube_for_screen.print_cube()
+            #    cube_for_screen.rotate(action)
 
             if self.shutdown_event.is_set():
                 break
@@ -1389,7 +1392,7 @@ if __name__ == '__main__':
     try:
         while True:
 
-            # We can use any CraneCuber object to take a pic of side F to figure out the cube size
+            # Size doesn't matter for scanning so use a CraneCuber3x3x3 object
             cc = CraneCuber3x3x3(SERVER, args.emulate)
             mts.cc = cc
             cc.mts = mts
@@ -1401,36 +1404,38 @@ if __name__ == '__main__':
             while not cc.shutdown_event.is_set() and cc.waiting_for_touch_sensor.is_set():
                 sleep (0.1)
 
-            if not cc.shutdown_event.is_set():
+            if cc.shutdown_event.is_set():
+                break
 
-                # Take a pic of the first side to get the size of the cube so we can create the appropriate object
-                png_filename = cc.scan_face('F')
-                F_in_ascii = subprocess.check_output(['./utils/pic_to_ascii.py', png_filename]).decode('ascii')
-                log.info("\n\n" + F_in_ascii + "\n\n")
+            cc.scan()
+            cc.get_colors()
 
-                cmd = 'rubiks-cube-tracker.py --filename %s' % png_filename
-                colors_for_F = json.loads(subprocess.check_output(cmd, shell=True).decode('ascii').strip())
-                size = int(sqrt(len(colors_for_F.keys())))
+            # We have scanned all sides and know how many squares there are, use
+            # this to create an object of the appropriate class
+            #
+            # cc.colors is a dict where the square_index is the key and the RGB is the value
+            colors = deepcopy(cc.colors)
+            squares_per_side = len(colors.keys()) / 6
+            size = int(math.sqrt(squares_per_side))
 
-                if size == 2:
-                    cc = CraneCuber2x2x2(SERVER, args.emulate)
-                elif size == 3:
-                    pass
-                elif size == 4:
-                    cc = CraneCuber4x4x4(SERVER, args.emulate)
-                elif size == 5:
-                    cc = CraneCuber5x5x5(SERVER, args.emulate)
-                elif size == 6:
-                    cc = CraneCuber6x6x6(SERVER, args.emulate)
-                else:
-                    raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
+            if size == 2:
+                cc = CraneCuber2x2x2(SERVER, args.emulate)
+            elif size == 3:
+                pass
+            elif size == 4:
+                cc = CraneCuber4x4x4(SERVER, args.emulate)
+            elif size == 5:
+                cc = CraneCuber5x5x5(SERVER, args.emulate)
+            elif size == 6:
+                cc = CraneCuber6x6x6(SERVER, args.emulate)
+            else:
+                raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
-                mts.cc = cc
-                cc.mts = mts
-                cc.scan()
-                cc.get_colors()
-                cc.resolve_colors()
-                cc.resolve_actions()
+            mts.cc = cc
+            cc.mts = mts
+            cc.colors = colors
+            cc.resolve_colors()
+            cc.resolve_actions()
 
             if cc.shutdown_event.is_set() or args.emulate:
                 break

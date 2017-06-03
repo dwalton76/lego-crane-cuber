@@ -47,7 +47,7 @@ Please follow the README instructions there to install the solvers you are inter
 Substitute the IP address of your server in place of x.x.x.x below
 ```
 $ cd ~/
-$ sudo apt-get install git
+$ sudo apt-get install git fswebcam
 $ git clone https://github.com/dwalton76/lego-crane-cuber.git
 $ cd ~/lego-crane-cuber
 $ echo 'x.x.x.x' > server.conf
