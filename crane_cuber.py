@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 
 # This should be 90 degrees but some extra is needed to account for
 # play between the gears
-FLIPPER_DEGREES = -130
+FLIPPER_DEGREES = -125
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -160,13 +160,11 @@ class CraneCuber3x3x3(object):
         # positive is clockwise
         # negative is counter clockwise
         #self.TURNTABLE_SPEED_NORMAL = 1050
-        #self.TURNTABLE_SPEED_EXACT = 600
         #self.TURNTABLE_SPEED_FREE = 800
 
         # Slow down for more accuracy
         self.TURNTABLE_SPEED_NORMAL = 800
-        self.TURNTABLE_SPEED_EXACT = 400
-        self.TURNTABLE_SPEED_FREE = 600
+        self.TURNTABLE_SPEED_FREE = 800
 
         # positive moves down
         # negative moves up
@@ -191,7 +189,15 @@ class CraneCuber3x3x3(object):
 
         # 'brake' stops but doesn't hold the motor in place
         # 'hold' stops and holds the motor in place
+
+        # Lower all the way down, then raise a bit, then lower back down.
+        # We do this to make sure it is in the same starting spot each time.
         log.info("Initialize elevator %s" % self.elevator)
+        self.elevator.run_forever(speed_sp=20, stop_action='hold')
+        self.elevator.wait_until('running')
+        self.elevator.wait_until('stalled')
+        self.elevator.run_to_rel_pos(speed_sp=100, position_sp=-60)
+        self.elevator.wait_while('running')
         self.elevator.run_forever(speed_sp=20, stop_action='hold')
         self.elevator.wait_until('running')
         self.elevator.wait_until('stalled')
@@ -240,11 +246,9 @@ class CraneCuber3x3x3(object):
         log.error('Caught SIGINT')
         self.shutdown_robot()
 
-    def _rotate(self, final_pos, exact=False):
+    def _rotate(self, final_pos):
 
-        if exact:
-            speed = self.TURNTABLE_SPEED_EXACT
-        elif self.rows_in_turntable == self.rows_and_cols:
+        if self.rows_in_turntable == self.rows_and_cols:
             speed = self.TURNTABLE_SPEED_FREE
         else:
             speed = self.TURNTABLE_SPEED_NORMAL
@@ -256,19 +260,6 @@ class CraneCuber3x3x3(object):
                                       ramp_down_sp=200)
         self.turntable.wait_until('running')
         self.turntable.wait_while('running')
-
-        if exact:
-            prev_pos = None
-
-            while self.turntable.position != final_pos:
-                log.info("turntable() position is %d, it should be %d" % (self.turntable.position, final_pos))
-                self.turntable.run_to_abs_pos(position_sp=final_pos,
-                                             speed_sp=200)
-                self.turntable.wait_while('running', timeout=100)
-
-                if prev_pos is not None and self.turntable.position == prev_pos:
-                    break
-                prev_pos = self.turntable.position
 
     def rotate(self, clockwise, quarter_turns):
 
@@ -316,7 +307,7 @@ class CraneCuber3x3x3(object):
             square_cube_pos = turn_pos + square_cube_degrees
             square_turntable_pos = round_to_quarter_turn(square_cube_pos + square_turntable_degrees)
 
-            self._rotate(turn_pos, exact=True)
+            self._rotate(turn_pos)
             self._rotate(square_cube_pos)
             self._rotate(square_turntable_pos)
 
@@ -521,9 +512,8 @@ class CraneCuber3x3x3(object):
             if rows == self.rows_and_cols:
                 flipper_plus_holder_height_studs_mm += 4
 
-            # dwalton
-            # cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
-            cube_rows_height = int(((self.rows_and_cols - rows) * self.square_size_mm) + (self.square_size_mm/2.0))
+            cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
+            #cube_rows_height = int(((self.rows_and_cols - rows) * self.square_size_mm) + (self.square_size_mm/2.0))
 
             final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
 
@@ -728,15 +718,25 @@ class CraneCuber3x3x3(object):
         # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
 
         if self.SERVER:
+            # Trying to pass json via the command line over ssh is a PITA so
+            # write it to a file and scp the file over to the server
+            with open('/tmp/crane-cuber.json', 'w') as fh:
+                json.dump(self.colors, fh, sort_keys=True, indent=4)
+
+            cmd = ['scp', '/tmp/crane-cuber.json', 'robot@%s:/tmp/' % self.SERVER]
+            log.info(' '.join(cmd))
+            subprocess.call(cmd)
+
             cmd = ['ssh',
                    'robot@%s' % self.SERVER,
                    'rubiks-color-resolver.py',
                    '--json',
-                   '%s' % json.dumps(self.colors)]
+                   '--filename',
+                   '/tmp/crane-cuber.json']
         else:
             cmd = ['rubiks-color-resolver.py',
                    '--json',
-                   '%s' % json.dumps(self.colors)]
+                   '%s' % json.dumps(self.colors, sort_keys=True)]
 
         try:
             log.info(' '.join(cmd))
@@ -1076,7 +1076,7 @@ class CraneCuber3x3x3(object):
             return
 
         if self.SERVER:
-            cmd = 'ssh robot@%s "kociemba %s"' % (self.SERVER, self.cube_for_resolver)
+            cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s"' % (self.SERVER, self.cube_for_resolver)
         else:
             cmd = 'cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s' % ''.join(self.cube_for_resolver)
 
