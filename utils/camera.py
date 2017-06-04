@@ -7,10 +7,10 @@ A Simple mjpg stream http server
 https://gist.github.com/n3wtron/4624820
 """
 
-# apt-get install python-opencv
+# sudo apt-get install python-opencv
 import cv2
 
-# apt-get install python-pil
+# sudo apt-get install python-pil
 from PIL import Image
 
 import logging

@@ -6,8 +6,7 @@ A Rubiks cube solving robot made from EV3 + 42009
 """
 
 from copy import deepcopy
-from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, TouchSensor, LargeMotor, MediumMotor
-from rubikscolorresolver import RubiksColorSolverGeneric
+from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, TouchSensor, LargeMotor, MediumMotor
 from math import pi, sqrt
 from pprint import pformat
 #from rubikscubennnsolver.RubiksCube222 import RubiksCube222
@@ -129,15 +128,17 @@ class CraneCuber3x3x3(object):
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
             self.flipper = DummyMotor(OUTPUT_B)
-            self.turntable= DummyMotor(OUTPUT_C)
+            self.turntableC = DummyMotor(OUTPUT_C)
+            self.turntableD = DummyMotor(OUTPUT_D)
             self.touch_sensor = DummySensor()
         else:
             self.elevator = LargeMotor(OUTPUT_A)
             self.flipper = MediumMotor(OUTPUT_B)
-            self.turntable= LargeMotor(OUTPUT_C)
+            self.turntableC = LargeMotor(OUTPUT_C)
+            self.turntableD = LargeMotor(OUTPUT_D)
             self.touch_sensor = TouchSensor()
 
-        self.motors = [self.elevator, self.flipper, self.turntable]
+        self.motors = [self.elevator, self.flipper, self.turntableC, self.turntableD]
         self.rows_in_turntable = 0
         self.facing_north = 'B'
         self.facing_west = 'L'
@@ -193,10 +194,10 @@ class CraneCuber3x3x3(object):
         # Lower all the way down, then raise a bit, then lower back down.
         # We do this to make sure it is in the same starting spot each time.
         log.info("Initialize elevator %s" % self.elevator)
-        self.elevator.run_forever(speed_sp=20, stop_action='hold')
+        self.elevator.run_forever(speed_sp=20, stop_action='brake')
         self.elevator.wait_until('running')
         self.elevator.wait_until('stalled')
-        self.elevator.run_to_rel_pos(speed_sp=100, position_sp=-60)
+        self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
         self.elevator.wait_while('running')
         self.elevator.run_forever(speed_sp=20, stop_action='hold')
         self.elevator.wait_until('running')
@@ -214,9 +215,11 @@ class CraneCuber3x3x3(object):
         self.flipper.stop(stop_action='hold')
         self.flipper_at_init = True
 
-        log.info("Initialize turntable %s" % self.turntable)
-        self.turntable.reset()
-        self.turntable.stop(stop_action='hold')
+        log.info("Initialize turntable %s and %s" % (self.turntableC, self.turntableD))
+        self.turntableC.reset()
+        self.turntableD.reset()
+        self.turntableC.stop(stop_action='hold')
+        self.turntableD.stop(stop_action='hold')
 
     def shutdown_robot(self):
 
@@ -253,13 +256,23 @@ class CraneCuber3x3x3(object):
         else:
             speed = self.TURNTABLE_SPEED_NORMAL
 
-        self.turntable.run_to_abs_pos(position_sp=final_pos,
-                                      speed_sp=speed,
-                                      stop_action='hold',
-                                      ramp_up_sp=100,
-                                      ramp_down_sp=200)
-        self.turntable.wait_until('running')
-        self.turntable.wait_while('running')
+        self.turntableC.run_to_abs_pos(position_sp=final_pos,
+                                       speed_sp=speed,
+                                       stop_action='hold',
+                                       ramp_down_sp=500)
+        self.turntableD.run_to_abs_pos(position_sp=final_pos,
+                                       speed_sp=speed,
+                                       stop_action='hold',
+                                       ramp_down_sp=500)
+
+        self.turntableC.wait_until('running', timeout=2000)
+        self.turntableD.wait_until('running', timeout=2000)
+
+        self.turntableC.wait_while('running', timeout=2000)
+        self.turntableD.wait_while('running', timeout=2000)
+        #log.info("end _rotate() %s is %s at %s, %s is %s at %s" %\
+        #    (self.turntableC, self.turntableC.state, self.turntableC.position,
+        #     self.turntableD, self.turntableD.state, self.turntableD.position))
 
     def rotate(self, clockwise, quarter_turns):
 
@@ -267,7 +280,9 @@ class CraneCuber3x3x3(object):
             return
 
         assert quarter_turns > 0 and quarter_turns <= 2, "quarter_turns is %d, it must be between 0 and 2" % quarter_turns
-        current_pos = self.turntable.position
+        current_pos_C = self.turntableC.position
+        current_pos_D = self.turntableC.position
+        current_pos = int((current_pos_C + current_pos_D)/2)
         start = datetime.datetime.now()
         TT_GEAR_SLIP_DEGREES = 2
 
@@ -365,7 +380,7 @@ class CraneCuber3x3x3(object):
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
                                     speed_sp=self.FLIPPER_SPEED,
                                     ramp_up_sp=0,
-                                    ramp_down_sp=100,
+                                    ramp_down_sp=400,
                                     stop_action='hold')
         self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
@@ -373,7 +388,7 @@ class CraneCuber3x3x3(object):
         self.flipper.run_to_abs_pos(position_sp=0,
                                     speed_sp=self.FLIPPER_SPEED/2,
                                     ramp_up_sp=0,
-                                    ramp_down_sp=100,
+                                    ramp_down_sp=400,
                                     stop_action='hold')
         self.flipper.wait_until('running')
         self.flipper.wait_while('running', timeout=1000)
@@ -412,7 +427,7 @@ class CraneCuber3x3x3(object):
                                     ramp_down_sp=100,
                                     stop_action='hold')
         self.flipper.wait_until('running')
-        self.flipper.wait_while('running', timeout=2000)
+        self.flipper.wait_while('running', timeout=1000)
         self.flipper_at_init = not self.flipper_at_init
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -505,7 +520,7 @@ class CraneCuber3x3x3(object):
 
         if rows:
             # 16 studs at 8mm per stud = 128mm
-            flipper_plus_holder_height_studs_mm = 132
+            flipper_plus_holder_height_studs_mm = 130
 
             # If we are elevating the cube all the way up to spin it freely give
             # some extra wiggle room to make sure it is clear of the holder
@@ -516,6 +531,7 @@ class CraneCuber3x3x3(object):
             #cube_rows_height = int(((self.rows_and_cols - rows) * self.square_size_mm) + (self.square_size_mm/2.0))
 
             final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
+            final_pos_mm -= int(self.square_size_mm/4)
 
             # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
             # http://www.robertcailliau.eu/Alphabetical/L/Lego/Gears/Dimensions/
@@ -1098,6 +1114,10 @@ class CraneCuber3x3x3(object):
         if not self.flipper_at_init:
             self.flip()
 
+        # Rotate back to 0
+        square_pos = round_to_quarter_turn(self.turntableC.position)
+        self._rotate(square_pos)
+
     def test_foo(self):
         foo = ("U", )
         #foo = ("U'", )
@@ -1266,7 +1286,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 50
+        self.TURN_BLOCKED_TOUCH_DEGREES = 49
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -70
         self.rows_in_turntable_to_count_as_face_turn = 3
@@ -1285,7 +1305,7 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.FLIPPER_SPEED = 200
 
         # These are for a 67mm 6x6x6 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 32
+        self.TURN_BLOCKED_TOUCH_DEGREES = 33
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -45
         self.rows_in_turntable_to_count_as_face_turn = 6
@@ -1378,8 +1398,8 @@ if __name__ == '__main__':
     #cc = CraneCuber2x2x2(SERVER, args.emulate)
     #cc = CraneCuber3x3x3(SERVER, args.emulate)
     #cc = CraneCuber4x4x4(SERVER, args.emulate)
-    #cc = CraneCuber5x5x5(SERVER, args.emulate)
-    cc = CraneCuber6x6x6(SERVER, args.emulate)
+    cc = CraneCuber5x5x5(SERVER, args.emulate)
+    #cc = CraneCuber6x6x6(SERVER, args.emulate)
     cc.init_motors()
     cc.test_foo()
     cc.shutdown_robot()

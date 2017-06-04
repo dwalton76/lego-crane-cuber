@@ -6,7 +6,17 @@ cam = cv2.VideoCapture(0)
 cam.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 352)
 cam.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
 
-# 0.20000000298023224
+'''
+('Height: ', 240.0)
+('Width: ', 320.0)
+('Brightness: ', 0.501960813999176)
+('Contrast: ', 0.125490203499794)
+('Saturation: ', 0.125490203499794)
+('Gain: ', 0.1568627506494522)
+
+'''
+
+
 # cam.set(cv2.cv.CV_CAP_PROP_SATURATION, 0.05)
 
 
