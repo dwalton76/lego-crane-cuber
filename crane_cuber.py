@@ -105,6 +105,9 @@ class DummyMotor(object):
     def wait_while(self, state, timeout=None):
         pass
 
+    def wait_until_not_moving(self, timeout=None):
+        pass
+
 
 class DummySensor(object):
 
@@ -124,6 +127,7 @@ class CraneCuber3x3x3(object):
         self.cube_for_resolver = None
         self.mts = None
         self.waiting_for_touch_sensor = Event()
+        self.last_clockwise = None
 
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
@@ -158,14 +162,11 @@ class CraneCuber3x3x3(object):
         # negative moves towards camera
         self.FLIPPER_SPEED = 300
 
+        # Slow down for more accuracy
         # positive is clockwise
         # negative is counter clockwise
-        #self.TURNTABLE_SPEED_NORMAL = 1050
-        #self.TURNTABLE_SPEED_FREE = 800
-
-        # Slow down for more accuracy
-        self.TURNTABLE_SPEED_NORMAL = 800
-        self.TURNTABLE_SPEED_FREE = 800
+        self.TURNTABLE_SPEED_NORMAL = 1050
+        self.TURNTABLE_SPEED_FREE = 600
 
         # positive moves down
         # negative moves up
@@ -226,11 +227,13 @@ class CraneCuber3x3x3(object):
         if self.shutdown_event.is_set():
             return
 
+        self.shutdown_event.set()
+        log.info('shutting down')
+
         if self.mts:
             log.info('shutting down mts')
             self.mts.shutdown_event.set()
 
-        log.info('shutting down')
         self.elevate(0)
 
         if self.flipper.position > 10:
@@ -238,8 +241,6 @@ class CraneCuber3x3x3(object):
 
         for x in self.motors:
             x.stop(stop_action='brake')
-
-        self.shutdown_event.set()
 
     def signal_term_handler(self, signal, frame):
         log.error('Caught SIGTERM')
@@ -249,21 +250,27 @@ class CraneCuber3x3x3(object):
         log.error('Caught SIGINT')
         self.shutdown_robot()
 
-    def _rotate(self, final_pos):
+    def _rotate(self, final_pos, must_be_accurate):
 
-        if self.rows_in_turntable == self.rows_and_cols:
-            speed = self.TURNTABLE_SPEED_FREE
-        else:
+        if must_be_accurate:
             speed = self.TURNTABLE_SPEED_NORMAL
+            ramp_up = 200
+            ramp_down = 700
+        else:
+            speed = self.TURNTABLE_SPEED_FREE
+            ramp_up = 0
+            ramp_down = 0
 
         self.turntableC.run_to_abs_pos(position_sp=final_pos,
                                        speed_sp=speed,
                                        stop_action='hold',
-                                       ramp_down_sp=500)
+                                       ramp_up_sp=ramp_up,
+                                       ramp_down_sp=ramp_down)
         self.turntableD.run_to_abs_pos(position_sp=final_pos,
                                        speed_sp=speed,
                                        stop_action='hold',
-                                       ramp_down_sp=500)
+                                       ramp_up_sp=ramp_up,
+                                       ramp_down_sp=ramp_down)
 
         self.turntableC.wait_until('running', timeout=2000)
         self.turntableD.wait_until('running', timeout=2000)
@@ -298,8 +305,8 @@ class CraneCuber3x3x3(object):
             turn_pos = current_pos + turn_degrees
             square_turntable_pos = round_to_quarter_turn(turn_pos + square_turntable_degrees)
 
-            self._rotate(turn_pos)
-            self._rotate(square_turntable_pos)
+            self._rotate(turn_pos, False)
+            self._rotate(square_turntable_pos, False)
 
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -322,15 +329,35 @@ class CraneCuber3x3x3(object):
             square_cube_pos = turn_pos + square_cube_degrees
             square_turntable_pos = round_to_quarter_turn(square_cube_pos + square_turntable_degrees)
 
-            self._rotate(turn_pos)
-            self._rotate(square_cube_pos)
-            self._rotate(square_turntable_pos)
+            # dwalton
+            # turn_pos needs to keep track of whether or not we last rotated
+            # clockwise or counter-clockwise and add a few degrees if we
+            # will be rotating in the opposite direction
+            '''
+            if self.last_clockwise is None:
+                pass
+
+            elif self.last_clockwise is True:
+                if not clockwise:
+                    turn_pos -= 1
+
+            elif self.last_clockwise is False:
+                if clockwise:
+                    turn_pos += 1
+            '''
+
+            self._rotate(turn_pos, True)
+            self._rotate(square_cube_pos, False)
+            self._rotate(square_turntable_pos, False)
 
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_rotate += delta_ms
             log.info("rotate_cube() BLOCKED %d quarter turns, clockwise %s, current_pos %d, turn_pos %d, square_cube_pos %d, square_turntable_pos %d took %dms" %
                 (quarter_turns, clockwise, current_pos, turn_pos, square_cube_pos, square_turntable_pos, delta_ms))
+
+        # Remember if we last turned clockwise or counter-clockwise
+        self.last_clockwise = clockwise
 
         # Only update the facing_XYZ variables if the entire side is turning.  For
         # a 3x3x3 this means the middle square is being turned, this happens if at
@@ -380,18 +407,18 @@ class CraneCuber3x3x3(object):
         self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
                                     speed_sp=self.FLIPPER_SPEED,
                                     ramp_up_sp=0,
-                                    ramp_down_sp=400,
+                                    ramp_down_sp=500,
                                     stop_action='hold')
         self.flipper.wait_until('running')
-        self.flipper.wait_while('running', timeout=1000)
+        self.flipper.wait_until_not_moving(timeout=1000)
 
         self.flipper.run_to_abs_pos(position_sp=0,
                                     speed_sp=self.FLIPPER_SPEED/2,
                                     ramp_up_sp=0,
-                                    ramp_down_sp=400,
+                                    ramp_down_sp=500,
                                     stop_action='hold')
         self.flipper.wait_until('running')
-        self.flipper.wait_while('running', timeout=1000)
+        self.flipper.wait_until_not_moving(timeout=1000)
 
     def flip_to_init(self):
         if self.flipper.position >= 10:
@@ -424,10 +451,10 @@ class CraneCuber3x3x3(object):
         self.flipper.run_to_abs_pos(position_sp=final_pos,
                                     speed_sp=speed,
                                     ramp_up_sp=0,
-                                    ramp_down_sp=100,
+                                    ramp_down_sp=300,
                                     stop_action='hold')
         self.flipper.wait_until('running')
-        self.flipper.wait_while('running', timeout=1000)
+        self.flipper.wait_until_not_moving(timeout=1000)
         self.flipper_at_init = not self.flipper_at_init
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -437,23 +464,6 @@ class CraneCuber3x3x3(object):
         if final_pos == 0 and self.flipper.position != final_pos:
             self.flipper.reset()
             self.flipper.stop(stop_action='hold')
-
-        # uncomment this if you want to test with 100% accurate flip position
-        '''
-        prev_pos = None
-
-        # Make sure we stopped where we should have
-        while self.flipper.position != final_pos:
-            log.info("flip() position is %d, it should be %d" % (self.flipper.position, final_pos))
-            self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                        speed_sp=30,
-                                        stop_action='hold')
-            self.flipper.wait_while('running', timeout=100)
-
-            if prev_pos is not None and self.flipper.position == prev_pos:
-                break
-            prev_pos = self.flipper.position
-        '''
 
         # facing_west and facing_east won't change
         orig_north = self.facing_north
@@ -520,7 +530,7 @@ class CraneCuber3x3x3(object):
 
         if rows:
             # 16 studs at 8mm per stud = 128mm
-            flipper_plus_holder_height_studs_mm = 130
+            flipper_plus_holder_height_studs_mm = 134
 
             # If we are elevating the cube all the way up to spin it freely give
             # some extra wiggle room to make sure it is clear of the holder
@@ -547,35 +557,43 @@ class CraneCuber3x3x3(object):
 
         # going down
         if rows < self.rows_in_turntable:
+            # If we are lowering the cube we have to use a ramp_up because if we
+            # drop the cube too suddently it tends to jam up
+
+            # drop the cube a few more rows
             if final_pos:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
-                                             ramp_up_sp=0,
-                                             ramp_down_sp=100,
+                                             ramp_up_sp=500,
+                                             ramp_down_sp=200, # ramp_down so we stop at the right spot
                                              stop_action='hold')
+            # go all the way to the bottom
             else:
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_FAST,
-                                             ramp_up_sp=0,
-                                             ramp_down_sp=300, # ramp_down so we don't slam into the ground
+                                             ramp_up_sp=500,
+                                             ramp_down_sp=200, # ramp_down so we don't slam into the ground and tear the robot apart
                                              stop_action='hold')
         # going up
         else:
+            # raise the cube a few more rows
             if self.rows_in_turntable:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
                                              ramp_up_sp=0,
-                                             ramp_down_sp=100,
+                                             ramp_down_sp=200,
                                              stop_action='hold')
+            # starting out at the bottom
             else:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_UP_FAST,
-                                             ramp_up_sp=200, # ramp_up here so we don't slam into the cube at full speed
+                                             ramp_up_sp=0, # ramp_up here so we don't slam into the cube at full speed
                                              ramp_down_sp=200, # ramp_down so we stop at the right spot
                                              stop_action='hold')
 
         self.elevator.wait_until('running')
-        self.elevator.wait_while('running')
+        self.elevator.wait_until_not_moving(timeout=1200)
+
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
         self.time_elevate += delta_ms
@@ -622,14 +640,8 @@ class CraneCuber3x3x3(object):
         else:
             # capture a single png from the webcam
             cmd = ['fswebcam',
-                   '--device', '/dev/video0',
-                   '--no-timestamp',
-                   '--no-title',
-                   '--no-subtitle',
-                   '--no-banner',
-                   '--no-info',
-                   '-r', '352x240',
-                   '--png', '1']
+                   '--config',
+                   'fswebcam.conf']
 
             # The L, F, R, and B sides are simple, for the U and D sides the cube in
             # the png is rotated by 90 degrees so tell fswebcam to rotate 270
@@ -880,22 +892,6 @@ class CraneCuber3x3x3(object):
         self.time_rotate = 0
         debug = False
 
-        #if self.cube_for_resolver:
-        #    if self.rows_and_cols == 2:
-        #        cube_for_screen = RubiksCube222(self.cube_for_resolver, debug)
-        #    elif self.rows_and_cols == 3:
-        #        cube_for_screen = RubiksCube333(self.cube_for_resolver, debug)
-        #    elif self.rows_and_cols == 4:
-        #        cube_for_screen = RubiksCube444(self.cube_for_resolver, debug)
-        #    elif self.rows_and_cols == 5:
-        #        cube_for_screen = RubiksCube555(self.cube_for_resolver, debug)
-        #    elif self.rows_and_cols == 6:
-        #        cube_for_screen = RubiksCube666(self.cube_for_resolver, debug)
-        #    elif self.rows_and_cols == 7:
-        #        cube_for_screen = RubiksCube777(self.cube_for_resolver, debug)
-        #else:
-        #    cube_for_screen = None
-
         # If use_shortcut is True and we do back-to-back set of moves on opposite
         # faces (like "F B") do not bother flipping the cube around to make B face
         # up, just rotate with F facing up.
@@ -910,17 +906,9 @@ class CraneCuber3x3x3(object):
             use_shortcut = False
 
         for (index, action) in enumerate(actions):
-            # os.system('clear')
-            #if cube_for_screen:
-            #    print("Phase     : %s" % cube_for_screen.phase())
-
             desc = "Move %d/%d : %s" % (index, total_actions, action)
             print(desc)
             log.info(desc)
-
-            #if cube_for_screen:
-            #    cube_for_screen.print_cube()
-            #    cube_for_screen.rotate(action)
 
             if self.shutdown_event.is_set():
                 break
@@ -966,7 +954,6 @@ class CraneCuber3x3x3(object):
             if rows == self.rows_and_cols:
                 pass
 
-            # For a 5x5x5 convert a 3Lw move to a 2Rw'
             elif rows >= self.rows_in_turntable_to_count_as_face_turn:
                 raise Exception("CraneCuber does not yet support %s for this size cube" % action)
 
@@ -1116,7 +1103,7 @@ class CraneCuber3x3x3(object):
 
         # Rotate back to 0
         square_pos = round_to_quarter_turn(self.turntableC.position)
-        self._rotate(square_pos)
+        self._rotate(square_pos, True)
 
     def test_foo(self):
         foo = ("U", )
@@ -1286,7 +1273,7 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 49
+        self.TURN_BLOCKED_TOUCH_DEGREES = 52
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -70
         self.rows_in_turntable_to_count_as_face_turn = 3
@@ -1297,15 +1284,10 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
 
     def __init__(self, SERVER, emulate, rows_and_cols=6, size_mm=67):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
-
-        # If you drop a 6x6x6 too fast the weight of it will eventually work
-        # the pins loose that hold the flipper
-        self.ELEVATOR_SPEED_DOWN_FAST = 600
-
         self.FLIPPER_SPEED = 200
 
         # These are for a 67mm 6x6x6 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 33
+        self.TURN_BLOCKED_TOUCH_DEGREES = 34
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -45
         self.rows_in_turntable_to_count_as_face_turn = 6

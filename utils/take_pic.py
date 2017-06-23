@@ -2,54 +2,66 @@
 
 import cv2
 
-cam = cv2.VideoCapture(0)
-cam.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, 352)
-cam.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, 240)
+dev = 0
+width = 352
+height = 240
+brightness = None
+contrast = None
+saturation = None
+gain = None
 
-'''
-('Height: ', 240.0)
-('Width: ', 320.0)
-('Brightness: ', 0.501960813999176)
-('Contrast: ', 0.125490203499794)
-('Saturation: ', 0.125490203499794)
-('Gain: ', 0.1568627506494522)
+with open('camera.conf', 'r') as fh:
+    for line in fh:
+        line = line.strip()
 
-'''
+        if line.startswith('device'):
+            # device /dev/video0
+            dev = int(line[-1])
 
+        elif line.startswith('resolution'):
+            (width, height) = line.split()[1].split('x')
+            width = int(width)
+            height = int(height)
 
-# cam.set(cv2.cv.CV_CAP_PROP_SATURATION, 0.05)
+        elif line.startswith('brightness'):
+            brightness = float(line.split()[1])
 
+        elif line.startswith('contrast'):
+            contrast = float(line.split()[1])
 
-#test = cam.get(cv2.cv.CV_CAP_PROP_POS_MSEC)
-#ratio = cam.get(cv2.cv.CV_CAP_PROP_POS_AVI_RATIO)
-#frame_rate = cam.get(cv2.cv.CV_CAP_PROP_FPS)
-width = cam.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH)
-height = cam.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT)
-brightness = cam.get(cv2.cv.CV_CAP_PROP_BRIGHTNESS)
-contrast = cam.get(cv2.cv.CV_CAP_PROP_CONTRAST)
-saturation = cam.get(cv2.cv.CV_CAP_PROP_SATURATION)
-#hue = cam.get(cv2.cv.CV_CAP_PROP_HUE)
-gain = cam.get(cv2.cv.CV_CAP_PROP_GAIN)
-#exposure = cam.get(cv2.cv.CV_CAP_PROP_EXPOSURE)
+        elif line.startswith('saturation'):
+            saturation = float(line.split()[1])
 
-#print("Test: ", test)
-#print("Ratio: ", ratio)
-#print("Frame Rate: ", frame_rate)
+        elif line.startswith('gain'):
+            gain = float(line.split()[1])
 
-print("Height: ", height)
-print("Width: ", width)
-print("Brightness: ", brightness)
-print("Contrast: ", contrast)
-print("Saturation: ", saturation)
-#print("Hue: ", hue)
-print("Gain: ", gain)
-#print("Exposure: ", exposure)
+cam = cv2.VideoCapture(dev)
+cam.set(cv2.cv.CV_CAP_PROP_FRAME_WIDTH, width)
+cam.set(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT, height)
+print "width      : %s" % width
+print "height     : %s" % height
+
+if brightness:
+    print "brightness : %s" % brightness
+    cam.set(cv2.cv.CV_CAP_PROP_BRIGHTNESS, brightness)
+
+if contrast:
+    print "contrast   : %s" % contrast
+    cam.set(cv2.cv.CV_CAP_PROP_CONTRAST, contrast)
+
+if saturation:
+    print "saturation : %s" % saturation
+    cam.set(cv2.cv.CV_CAP_PROP_SATURATION, saturation)
+
+if gain:
+    print "gain       : %s" % gain
+    cam.set(cv2.cv.CV_CAP_PROP_GAIN, gain)
 
 print("calling cam.read")
 (ret, image) = cam.read() # captures image
 print("end     cam.read")
 #cv2.imshow("Test Picture", im) # displays captured image
-cv2.imwrite("test.png", image) # writes image test.bmp to disk
+cv2.imwrite("foo.png", image) # writes image test.bmp to disk
 print("end     imwrite")
 cam.release()
 
