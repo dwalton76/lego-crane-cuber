@@ -9,12 +9,6 @@ from copy import deepcopy
 from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, TouchSensor, LargeMotor, MediumMotor
 from math import pi, sqrt
 from pprint import pformat
-#from rubikscubennnsolver.RubiksCube222 import RubiksCube222
-#from rubikscubennnsolver.RubiksCube333 import RubiksCube333
-#from rubikscubennnsolver.RubiksCube444 import RubiksCube444
-#from rubikscubennnsolver.RubiksCube555 import RubiksCube555
-#from rubikscubennnsolver.RubiksCube666 import RubiksCube666
-#from rubikscubennnsolver.RubiksCube777 import RubiksCube777
 from time import sleep
 from threading import Thread, Event
 from time import sleep
@@ -329,7 +323,6 @@ class CraneCuber3x3x3(object):
             square_cube_pos = turn_pos + square_cube_degrees
             square_turntable_pos = round_to_quarter_turn(square_cube_pos + square_turntable_degrees)
 
-            # dwalton
             # turn_pos needs to keep track of whether or not we last rotated
             # clockwise or counter-clockwise and add a few degrees if we
             # will be rotating in the opposite direction
@@ -1105,11 +1098,13 @@ class CraneCuber3x3x3(object):
         square_pos = round_to_quarter_turn(self.turntableC.position)
         self._rotate(square_pos, True)
 
+    # dwalton
     def test_foo(self):
-        foo = ("U", )
+        foo = ("3Uw", )
         #foo = ("U'", )
         self.run_actions(foo)
         self.flip_to_init()
+        self.elevate(0)
 
     def test_basics(self):
         """
@@ -1293,6 +1288,20 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.rows_in_turntable_to_count_as_face_turn = 6
 
 
+# dwalton
+class CraneCuber7x7x7(CraneCuber3x3x3):
+
+    def __init__(self, SERVER, emulate, rows_and_cols=7, size_mm=69):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+        self.FLIPPER_SPEED = 200
+
+        # These are for a 69mm 7x7x7 cube
+        self.TURN_BLOCKED_TOUCH_DEGREES = 43
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -45
+        self.rows_in_turntable_to_count_as_face_turn = 4
+
+
 class MonitorTouchSensor(Thread):
 
     def __init__(self):
@@ -1380,8 +1389,9 @@ if __name__ == '__main__':
     #cc = CraneCuber2x2x2(SERVER, args.emulate)
     #cc = CraneCuber3x3x3(SERVER, args.emulate)
     #cc = CraneCuber4x4x4(SERVER, args.emulate)
-    cc = CraneCuber5x5x5(SERVER, args.emulate)
+    #cc = CraneCuber5x5x5(SERVER, args.emulate)
     #cc = CraneCuber6x6x6(SERVER, args.emulate)
+    cc = CraneCuber7x7x7(SERVER, args.emulate)
     cc.init_motors()
     cc.test_foo()
     cc.shutdown_robot()
@@ -1430,6 +1440,8 @@ if __name__ == '__main__':
                 cc = CraneCuber5x5x5(SERVER, args.emulate)
             elif size == 6:
                 cc = CraneCuber6x6x6(SERVER, args.emulate)
+            elif size == 7:
+                cc = CraneCuber7x7x7(SERVER, args.emulate)
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
 
