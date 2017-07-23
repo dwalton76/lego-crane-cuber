@@ -33,12 +33,13 @@ FLIPPER_DEGREES = -125
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
 # We need the follower gear to rotate 90 degrees so 90/0.428633 = 209.96
+# Later on I changed gears to 1:4.666 so 420 degrees is the target now
 #
 # negative moves counter clockwise (viewed from above)
 # positive moves clockwise (viewed from above)
-TURNTABLE_TURN_DEGREES = 210
-TURN_FREE_TOUCH_DEGREES = 40
-TURN_FREE_SQUARE_TT_DEGREES = -40
+TURNTABLE_TURN_DEGREES = 420
+TURN_FREE_TOUCH_DEGREES = 80
+TURN_FREE_SQUARE_TT_DEGREES = -80
 
 # References
 # ==========
@@ -159,7 +160,7 @@ class CraneCuber3x3x3(object):
         # positive is clockwise
         # negative is counter clockwise
         self.TURNTABLE_SPEED_NORMAL = 1050
-        self.TURNTABLE_SPEED_FREE = 600
+        self.TURNTABLE_SPEED_FREE = 1050
 
         # positive moves down
         # negative moves up
@@ -169,9 +170,9 @@ class CraneCuber3x3x3(object):
         self.ELEVATOR_SPEED_DOWN_SLOW = 1050
 
         # These numbers are for a 57mm 3x3x3 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 107
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -150
+        self.TURN_BLOCKED_TOUCH_DEGREES = 214
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 80
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -300
         self.SQUISH_DEGREES = 120
         self.rows_in_turntable_to_count_as_face_turn = 2
 
@@ -189,12 +190,12 @@ class CraneCuber3x3x3(object):
         # Lower all the way down, then raise a bit, then lower back down.
         # We do this to make sure it is in the same starting spot each time.
         log.info("Initialize elevator %s" % self.elevator)
-        self.elevator.run_forever(speed_sp=40, stop_action='brake')
+        self.elevator.run_forever(speed_sp=20, stop_action='brake')
         self.elevator.wait_until('running')
         self.elevator.wait_until_not_moving(timeout=10000)
         self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
         self.elevator.wait_while('running')
-        self.elevator.run_forever(speed_sp=40, stop_action='hold')
+        self.elevator.run_forever(speed_sp=20, stop_action='hold')
         self.elevator.wait_until('running')
         self.elevator.wait_until_not_moving(timeout=2000)
         self.elevator.stop()
@@ -282,17 +283,17 @@ class CraneCuber3x3x3(object):
         # it the entire time we are rotating
         #
         # The gear ratio for the squisher is 1.8:1
-        # The gear ratio for the turntable is 1:2.333
+        # The gear ratio for the turntable is 1:4.666
         # positive closes the squisher
         # negative opens the squisher
         if final_pos > start_pos:
             # In this direction the squisher wants to open/unsquish so we must
             # close it to keep it in the same position
-            squisher_position = (delta / 2.333) / 1.8
+            squisher_position = (delta / 4.666) / 1.8
         else:
             # In this direction the squisher wants to close/squish so we must
             # open it to keep it in the same position
-            squisher_position = (delta / 2.333) / -1.8
+            squisher_position = (delta / 4.666) / -1.8
 
         time_to_rotate = float(delta/speed)
         squisher_speed = abs(int(squisher_position / time_to_rotate))
@@ -486,7 +487,7 @@ class CraneCuber3x3x3(object):
             speed = self.FLIPPER_SPEED
             self.flipper.run_to_abs_pos(position_sp=final_pos,
                                         speed_sp=self.FLIPPER_SPEED,
-                                        ramp_up_sp=100,
+                                        ramp_up_sp=0,
                                         ramp_down_sp=500,
                                         stop_action='hold')
 
@@ -592,49 +593,99 @@ class CraneCuber3x3x3(object):
         if rows == self.rows_in_turntable:
             return
 
+        # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
+        # http://www.robertcailliau.eu/Alphabetical/L/Lego/Gears/Dimensions/
+        diameter = 17.4
+        circ = diameter * pi
+        final_pos_mm = 0
+
+        # 16 studs at 8mm per stud = 128mm
+        flipper_plus_holder_height_studs_mm = 134
+
         if rows:
-            # 16 studs at 8mm per stud = 128mm
-            flipper_plus_holder_height_studs_mm = 134
 
-            # If we are elevating the cube all the way up to spin it freely give
-            # some extra wiggle room to make sure it is clear of the holder
-            if rows == self.rows_and_cols:
-                flipper_plus_holder_height_studs_mm += 4
-
-            # The 7x7x7 squares are not all the same size, the outside squares
-            # are bigger than the center squares
-            if self.rows_and_cols == 7:
-                inside_square_size_mm = 9
-                outside_square_size_mm = 12
-
-                if rows == 7:
-                    cube_rows_height = 0
-                elif rows == 6:
-                    cube_rows_height = outside_square_size_mm
-                elif rows == 5:
-                    cube_rows_height = outside_square_size_mm + (1 * inside_square_size_mm)
-                elif rows == 4:
-                    cube_rows_height = outside_square_size_mm + (2 * inside_square_size_mm)
-                elif rows == 3:
-                    cube_rows_height = outside_square_size_mm + (3 * inside_square_size_mm)
+            if self.rows_and_cols == 2:
+                if rows == 1:
+                    final_pos = -207
                 elif rows == 2:
-                    cube_rows_height = outside_square_size_mm + (4 * inside_square_size_mm)
-                elif rows == 1:
-                    cube_rows_height = outside_square_size_mm + (5 * inside_square_size_mm)
+                    final_pos = -285
+                else:
+                    raise Exception("2x2x2 does not have %d rows" % rows)
 
-                final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
+            elif self.rows_and_cols == 3:
+                if rows == 1:
+                    final_pos = -182
+                elif rows == 2:
+                    final_pos = -224
+                elif rows == 3:
+                    final_pos = -281
+                else:
+                    raise Exception("3x3x3 does not have %d rows" % rows)
+
+            elif self.rows_and_cols == 4:
+                if rows == 1:
+                    final_pos = -159
+                elif rows == 2:
+                    final_pos = -197
+                elif rows == 3:
+                    final_pos = -235
+                elif rows == 4:
+                    final_pos = -280
+                else:
+                    raise Exception("4x4x4 does not have %d rows" % rows)
+
+            elif self.rows_and_cols == 5:
+                if rows == 1:
+                    final_pos = -152
+                elif rows == 2:
+                    final_pos = -185
+                elif rows == 3:
+                    final_pos = -210
+                elif rows == 4:
+                    final_pos = -239
+                elif rows == 5:
+                    final_pos = -275
+                else:
+                    raise Exception("5x5x5 does not have %d rows" % rows)
+
+            elif self.rows_and_cols == 6:
+                if rows == 1:
+                    final_pos = -145
+                elif rows == 2:
+                    final_pos = -170
+                elif rows == 3:
+                    final_pos = -197
+                elif rows == 4:
+                    final_pos = -217
+                elif rows == 5:
+                    final_pos = -248
+                elif rows == 6:
+                    final_pos = -272
+                else:
+                    raise Exception("6x6x6 does not have %d rows" % rows)
+
+            elif self.rows_and_cols == 7:
+                if rows == 1:
+                    final_pos = -132
+                elif rows == 2:
+                    final_pos = -154
+                elif rows == 3:
+                    final_pos = -177
+                elif rows == 4:
+                    final_pos = -193
+                elif rows == 5:
+                    final_pos = -220
+                elif rows == 6:
+                    final_pos = -240
+                elif rows == 7:
+                    final_pos = -263
+                else:
+                    raise Exception("7x7x7 does not have %d rows" % rows)
+
             else:
-                cube_rows_height = int((self.rows_and_cols - rows) * self.square_size_mm)
-                final_pos_mm = flipper_plus_holder_height_studs_mm - cube_rows_height
-                final_pos_mm -= int(self.square_size_mm/4)
+                raise Exception("%dx%dx%d cubes are not supported" % (self.rows_and_cols, self.rows_and_cols, self.rows_and_cols))
 
-            # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
-            # http://www.robertcailliau.eu/Alphabetical/L/Lego/Gears/Dimensions/
-            diameter = 17.4
-            circ = diameter * pi
-
-            # We divide by 3 because our gear ratio is 3:1
-            final_pos = int(((final_pos_mm / circ) * 360)/3) * -1
+            final_pos -= 15
         else:
             final_pos = 0
 
@@ -650,23 +701,19 @@ class CraneCuber3x3x3(object):
             if final_pos:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
-                                             ramp_up_sp=500,
+                                             ramp_up_sp=200,
                                              ramp_down_sp=200, # ramp_down so we stop at the right spot
                                              stop_action='hold')
             # go all the way to the bottom
             else:
-                # ramp_down so we don't slam into the ground and tear the robot apart
-                # 7x7x7 is heavy so go slower
-                if self.rows_and_cols == 7:
-                    ramp_down = 700
-                else:
-                    ramp_down = 400
-
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_FAST,
                                              ramp_up_sp=500,
-                                             ramp_down_sp=ramp_down,
+                                             ramp_down_sp=400,
                                              stop_action='hold')
+            self.elevator.wait_until('running')
+            self.elevator.wait_until_not_moving(timeout=3000)
+
         # going up
         else:
             # raise the cube a few more rows
@@ -684,8 +731,8 @@ class CraneCuber3x3x3(object):
                                              ramp_down_sp=50, # ramp_down so we stop at the right spot
                                              stop_action='hold')
 
-        self.elevator.wait_until('running')
-        self.elevator.wait_until_not_moving(timeout=3000)
+            self.elevator.wait_until('running')
+            self.elevator.wait_while('running', timeout=4000)
 
         # experimental
         '''
@@ -704,12 +751,17 @@ class CraneCuber3x3x3(object):
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
         self.time_elevate += delta_ms
-        log.info("elevate() from %d to %d took %dms" % (self.rows_in_turntable, rows, delta_ms))
+        log.info("elevate() from %d to %d took %dms, final_pos target %s, position %s, final_pos_mm %d" %
+            (self.rows_in_turntable, rows, delta_ms, final_pos, self.elevator.position, final_pos_mm))
         self.rows_in_turntable = rows
 
         if final_pos == 0 and self.elevator.position != final_pos:
             self.elevator.reset()
             self.elevator.stop(stop_action='hold')
+
+        # dwalton
+        #log.info("Paused")
+        #input("Paused")
 
     def elevate_max(self):
         self.elevate(self.rows_and_cols)
@@ -1120,9 +1172,10 @@ class CraneCuber3x3x3(object):
 
             self.rotate(clockwise, quarter_turns)
 
-            # TODO only do this if we are about to go back down
-            self.elevate(rows=self.rows_and_cols)
-            self.squish()
+            # Only the really large cubes need this
+            if self.rows_and_cols >= 5:
+                self.elevate(rows=self.rows_and_cols)
+                self.squish()
 
             # Every 10 moves make sure the squisher hasn't crept out of place
             if index % 10 == 0:
@@ -1196,6 +1249,7 @@ class CraneCuber3x3x3(object):
 
         self.run_actions(actions)
         self.elevate(0)
+        self.squisher_reset()
 
         if not self.flipper_at_init:
             self.flip()
@@ -1346,9 +1400,9 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
         #self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -117
 
         # These are for a 55mm cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 135
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -195
+        self.TURN_BLOCKED_TOUCH_DEGREES = 270
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 80
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -390
         self.SQUISH_DEGREES = 140
 
         self.rows_in_turntable_to_count_as_face_turn = 2
@@ -1361,9 +1415,9 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 58
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 20
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -77
+        self.TURN_BLOCKED_TOUCH_DEGREES = 116
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 40
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -154
         self.SQUISH_DEGREES = 100
         self.rows_in_turntable_to_count_as_face_turn = 4
         log.warning("Using CraneCuber4x4x4, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
@@ -1375,9 +1429,9 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 50
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 15
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -70
+        self.TURN_BLOCKED_TOUCH_DEGREES = 100
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 30
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -140
         self.SQUISH_DEGREES = 90
         self.rows_in_turntable_to_count_as_face_turn = 3
         log.warning("Using CraneCuber5x5x5, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
@@ -1389,10 +1443,10 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 67mm 6x6x6 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 34
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -45
-        self.SQUISH_DEGREES = 75
+        self.TURN_BLOCKED_TOUCH_DEGREES = 68
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 26
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -90
+        self.SQUISH_DEGREES = 60
         self.rows_in_turntable_to_count_as_face_turn = 6
         log.warning("Using CraneCuber6x6x6, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
@@ -1403,10 +1457,10 @@ class CraneCuber7x7x7(CraneCuber3x3x3):
         CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
 
         # These are for a 69mm 7x7x7 cube
-        self.TURN_BLOCKED_TOUCH_DEGREES = 23
-        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 13
-        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -45
-        self.SQUISH_DEGREES = 75 # dwalton
+        self.TURN_BLOCKED_TOUCH_DEGREES = 46
+        self.TURN_BLOCKED_SQUARE_TT_DEGREES = 26
+        self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -90
+        self.SQUISH_DEGREES = 55
         self.rows_in_turntable_to_count_as_face_turn = 4
         log.warning("Using CraneCuber7x7x7, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
@@ -1514,8 +1568,8 @@ if __name__ == '__main__':
     try:
         while True:
 
-            # Use a CraneCuber7x7x7 object for scanning
-            cc = CraneCuber7x7x7(SERVER, args.emulate)
+            # Use a CraneCuber6x6x6 object for scanning
+            cc = CraneCuber6x6x6(SERVER, args.emulate)
             mts.cc = cc
             cc.mts = mts
             cc.init_motors()
