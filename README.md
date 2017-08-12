@@ -32,14 +32,12 @@ When the cube is scanned we get the RGB (red, green, blue) value for
 all 54 squares of a 3x3x3 cube.  rubiks-color-resolver analyzes those RGB
 values to determine which of the six possible cube colors is the color for
 each square.
-```
-$ sudo pip install git+https://github.com/dwalton76/rubiks-color-resolver.git
-$ sudo pip3 install git+https://github.com/dwalton76/rubiks-color-resolver.git
-```
+
+Follow the install instructions at https://github.com/dwalton76/rubiks-color-resolver
 
 ### Installing solvers
-Solvers for various size cubes are available at https://github.com/dwalton76/rubiks-cube-solvers
-Please follow the README instructions there to install the solvers you are interested in.
+A solver for various size cubes is available at https://github.com/dwalton76/rubiks-cube-NxNxN-solver
+You must install the rubiks-cube-NxNxN-solver solver
 
 
 ## Client Installation
