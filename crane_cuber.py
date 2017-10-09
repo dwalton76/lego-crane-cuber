@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 # This should be 90 degrees but some extra is needed to account for
 # play between the gears
-FLIPPER_DEGREES = -125
+FLIPPER_DEGREES = -140
 
 # The gear ratio is 1:2.333
 # The follower gear rotates 0.428633 time per each revolution of the driver gear
@@ -190,7 +190,7 @@ class CraneCuber3x3x3(object):
         # Lower all the way down, then raise a bit, then lower back down.
         # We do this to make sure it is in the same starting spot each time.
         log.info("Initialize elevator %s" % self.elevator)
-        self.elevator.run_forever(speed_sp=20, stop_action='brake')
+        self.elevator.run_forever(speed_sp=30, stop_action='brake')
         self.elevator.wait_until('running')
         self.elevator.wait_until_not_moving(timeout=10000)
         self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
@@ -470,10 +470,18 @@ class CraneCuber3x3x3(object):
 
         init_pos = self.flipper.position
 
+        # positive moves to init position
+        # negative moves towards camera
         if init_pos >= -10 and init_pos <= 10:
             final_pos = FLIPPER_DEGREES
         else:
             final_pos = 0
+
+        # If you flip too fast the momentum can cause the cube to slide a
+        # little when the flipper stops.  When the cube slides like this it is
+        # no longer lined up with the turntable above so when we raise the
+        # cube it jams up.
+        start = datetime.datetime.now()
 
         # If the elevator is raised then the cube is not in the flipper so we
         # can flip it pretty quickly.  If the cube is in the flipper though we
@@ -481,10 +489,7 @@ class CraneCuber3x3x3(object):
         # the cube to slide a little when the flipper stops.  When the cube
         # slides like this it is no longer lined up with the turntable above so
         # when we raise the cube it jams up.
-        start = datetime.datetime.now()
-
         if self.rows_in_turntable == 0:
-            speed = self.FLIPPER_SPEED
             self.flipper.run_to_abs_pos(position_sp=final_pos,
                                         speed_sp=self.FLIPPER_SPEED,
                                         ramp_up_sp=0,
@@ -501,30 +506,13 @@ class CraneCuber3x3x3(object):
 
         self.flipper.wait_until('running')
         self.flipper.wait_until_not_moving(timeout=4000)
-
-        # experimental
-        '''
-        current_pos = self.flipper.position
-
-        # Sometimes the kernel takes a second to update the position
-        while current_pos == init_pos:
-            current_pos = self.flipper.position
-            sleep(0.01)
-
-        # Did we jam up?
-        delta = abs(current_pos - init_pos)
-
-        if delta < 90:
-            log.warning("flip jammed up, only moved %d (%d->%d), final_pos %d" % (delta, init_pos, current_pos, final_pos))
-            self.shutdown_robot()
-            return
-        '''
-
+        final_pos = self.flipper.position
         self.flipper_at_init = not self.flipper_at_init
+
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
         self.time_flip += delta_ms
-        log.info("flip() to final_pos %s took %dms" % (final_pos, delta_ms))
+        log.info("flip() %d degrees took %dms" % (abs(final_pos - init_pos), delta_ms))
 
         if final_pos == 0 and self.flipper.position != final_pos:
             self.flipper.reset()
@@ -720,14 +708,14 @@ class CraneCuber3x3x3(object):
             if self.rows_in_turntable:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
-                                             ramp_up_sp=0,
+                                             ramp_up_sp=200,
                                              ramp_down_sp=50,
                                              stop_action='hold')
             # starting out at the bottom
             else:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_UP_FAST,
-                                             ramp_up_sp=0, # ramp_up here so we don't slam into the cube at full speed
+                                             ramp_up_sp=200, # ramp_up here so we don't slam into the cube at full speed
                                              ramp_down_sp=50, # ramp_down so we stop at the right spot
                                              stop_action='hold')
 
@@ -758,10 +746,6 @@ class CraneCuber3x3x3(object):
         if final_pos == 0 and self.elevator.position != final_pos:
             self.elevator.reset()
             self.elevator.stop(stop_action='hold')
-
-        # dwalton
-        #log.info("Paused")
-        #input("Paused")
 
     def elevate_max(self):
         self.elevate(self.rows_and_cols)
@@ -1171,11 +1155,8 @@ class CraneCuber3x3x3(object):
                     raise Exception("Unsupported direction %s" % direction)
 
             self.rotate(clockwise, quarter_turns)
-
-            # Only the really large cubes need this
-            if self.rows_and_cols >= 5:
-                self.elevate(rows=self.rows_and_cols)
-                self.squish()
+            self.elevate(rows=self.rows_and_cols)
+            self.squish()
 
             # Every 10 moves make sure the squisher hasn't crept out of place
             if index % 10 == 0:
