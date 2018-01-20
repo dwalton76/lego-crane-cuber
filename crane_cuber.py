@@ -26,8 +26,6 @@ import sys
 
 log = logging.getLogger(__name__)
 
-# This should be 90 degrees but some extra is needed to account for
-# play between the gears
 FLIPPER_DEGREES = -140
 
 # The gear ratio is 1:2.333
@@ -73,6 +71,10 @@ def convert_key_strings_to_int(data):
         else:
             result[key] = value
     return result
+
+
+class CubeJammed(Exception):
+    pass
 
 
 class DummyMotor(object):
@@ -189,15 +191,22 @@ class CraneCuber3x3x3(object):
 
         # Lower all the way down, then raise a bit, then lower back down.
         # We do this to make sure it is in the same starting spot each time.
-        log.info("Initialize elevator %s" % self.elevator)
+        log.info("Initialize elevator %s - lower all the way down" % self.elevator)
         self.elevator.run_forever(speed_sp=30, stop_action='brake')
         self.elevator.wait_until('running')
         self.elevator.wait_until_not_moving(timeout=10000)
+        self.elevator.stop()
+        self.elevator.reset()
+
+        log.info("Initialize elevator %s - raise a bit" % self.elevator)
         self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
-        self.elevator.wait_while('running')
+        self.elevator.wait_until('running')
+        self.elevator.wait_until_not_moving()
+
+        log.info("Initialize elevator %s - lower back down" % self.elevator)
         self.elevator.run_forever(speed_sp=20, stop_action='hold')
         self.elevator.wait_until('running')
-        self.elevator.wait_until_not_moving(timeout=2000)
+        self.elevator.wait_until_not_moving(timeout=4000)
         self.elevator.stop()
         self.elevator.reset()
         self.elevator.stop(stop_action='brake')
@@ -245,11 +254,13 @@ class CraneCuber3x3x3(object):
         if self.mts:
             log.info('shutting down mts')
             self.mts.shutdown_event.set()
+            self.mts.join()
+            self.mts = None
 
         self.elevate(0)
 
-        if self.flipper.position > 10:
-            self.flip()
+        #if self.flipper.position > 10:
+        #    self.flip()
 
         for x in self.motors:
             x.stop(stop_action='brake')
@@ -443,36 +454,38 @@ class CraneCuber3x3x3(object):
         if self.shutdown_event.is_set():
             return
 
-        self.flipper.run_to_abs_pos(position_sp=FLIPPER_DEGREES/2,
-                                    speed_sp=self.FLIPPER_SPEED,
-                                    ramp_up_sp=0,
-                                    ramp_down_sp=500,
-                                    stop_action='hold')
-        self.flipper.wait_until('running')
-        self.flipper.wait_until_not_moving(timeout=1000)
+        # Already settled nothing to do
+        if self.flipper.position == 0:
+            return
 
+        log.info("flip_settle_cube run_to_abs_pos")
         self.flipper.run_to_abs_pos(position_sp=0,
                                     speed_sp=self.FLIPPER_SPEED/2,
                                     ramp_up_sp=0,
                                     ramp_down_sp=500,
                                     stop_action='hold')
+        log.info("flip_settle_cube wait_until running")
         self.flipper.wait_until('running')
-        self.flipper.wait_until_not_moving(timeout=1000)
+        log.info("flip_settle_cube running wait_until_not_moving")
+        self.flipper.wait_until_not_moving(timeout=2000)
+        log.info("flip_settle_cube not moving")
 
     def flip_to_init(self):
-        if self.flipper.position >= 10:
+
+        if abs(self.flipper.position) >= abs(int(FLIPPER_DEGREES/2)):
             self.flip()
 
     def flip(self):
 
         if self.shutdown_event.is_set():
+            log.info("flip shutdown_event is set")
             return
 
         init_pos = self.flipper.position
 
         # positive moves to init position
         # negative moves towards camera
-        if init_pos >= -10 and init_pos <= 10:
+        if abs(init_pos) <= abs(int(FLIPPER_DEGREES/2)):
             final_pos = FLIPPER_DEGREES
         else:
             final_pos = 0
@@ -489,6 +502,8 @@ class CraneCuber3x3x3(object):
         # the cube to slide a little when the flipper stops.  When the cube
         # slides like this it is no longer lined up with the turntable above so
         # when we raise the cube it jams up.
+        log.info("flipper run_to_abs_pos(), rows_in_turntable %s, flipper_at_init %s, init_pos %s, final_pos %s" % (self.rows_in_turntable, self.flipper_at_init, init_pos, final_pos))
+
         if self.rows_in_turntable == 0:
             self.flipper.run_to_abs_pos(position_sp=final_pos,
                                         speed_sp=self.FLIPPER_SPEED,
@@ -504,17 +519,28 @@ class CraneCuber3x3x3(object):
                                         ramp_down_sp=0,
                                         stop_action='hold')
 
+        log.info("flipper wait_until running")
         self.flipper.wait_until('running')
+        log.info("flipper running wait_until_not_moving")
         self.flipper.wait_until_not_moving(timeout=4000)
-        final_pos = self.flipper.position
         self.flipper_at_init = not self.flipper_at_init
+        current_pos = self.flipper.position
+        log.info("flipper not moving, at_init %s" % self.flipper_at_init)
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
         self.time_flip += delta_ms
-        log.info("flip() %d degrees took %dms" % (abs(final_pos - init_pos), delta_ms))
+        degrees_moved = abs(current_pos - init_pos)
+        log.info("flip() %s degrees (%s -> %s, target %s) took %dms" %
+            (degrees_moved, init_pos, current_pos, final_pos, delta_ms))
 
-        if final_pos == 0 and self.flipper.position != final_pos:
+        # This shouldn't happen anymore now that we tilt the flipper a few
+        # degrees when we elevate() the cube up so that it is flush against
+        # the flipper when it comes back down.
+        if abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
+            raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
+
+        if final_pos == 0 and current_pos != final_pos:
             self.flipper.reset()
             self.flipper.stop(stop_action='hold')
 
@@ -527,7 +553,7 @@ class CraneCuber3x3x3(object):
         # Sometimes we flip when the elevator is raised all the way up, we do
         # this to get the flipper out of the way so we can take a pic of the
         # cube. If that is the case then then do not alter self.facing_xyz.
-        if not self.rows_in_turntable:
+        if self.rows_in_turntable == 0:
 
             # We flipped from the init position to where the flipper is blocking the view of the camera
             if abs(final_pos - FLIPPER_DEGREES) <= 20:
@@ -572,13 +598,16 @@ class CraneCuber3x3x3(object):
                             ||
                             ||
         """
-        assert rows >= 0 and rows <= self.rows_and_cols, "rows was %d, rows must be between 0 and %d" % (rows, self.rows_and_cols)
+        log.info("elevate called for rows %d, rows_in_turntable %d" % (rows, self.rows_in_turntable))
+        assert 0 <= rows <= self.rows_and_cols, "rows was %d, rows must be between 0 and %d" % (rows, self.rows_and_cols)
 
         if self.shutdown_event.is_set():
+            log.info("elevate: shutdown_event is set")
             return
 
         # nothing to do
         if rows == self.rows_in_turntable:
+            log.info("elevate: rows == rows_in_turntable nothing to do")
             return
 
         # The table in section 5 shows says that our 16 tooth gear has an outside diameter of 17.4
@@ -684,6 +713,7 @@ class CraneCuber3x3x3(object):
         if rows < self.rows_in_turntable:
             # If we are lowering the cube we have to use a ramp_up because if we
             # drop the cube too suddenly it tends to jam up
+            log.info("elevate down, final_pos %s, run_to_abs()" % final_pos)
 
             # drop the cube a few more rows
             if final_pos:
@@ -699,11 +729,16 @@ class CraneCuber3x3x3(object):
                                              ramp_up_sp=500,
                                              ramp_down_sp=400,
                                              stop_action='hold')
+            log.info("elevate down: wait_until running")
             self.elevator.wait_until('running')
+            log.info("elevate down: running, wait_until_not_moving")
             self.elevator.wait_until_not_moving(timeout=3000)
+            log.info("elevate down: not_moving")
 
         # going up
         else:
+            log.info("elevate up, rows_in_turntable %s, run_to_abs()" % self.rows_in_turntable)
+
             # raise the cube a few more rows
             if self.rows_in_turntable:
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
@@ -719,8 +754,30 @@ class CraneCuber3x3x3(object):
                                              ramp_down_sp=50, # ramp_down so we stop at the right spot
                                              stop_action='hold')
 
+            log.info("elevate up: wait_until running")
             self.elevator.wait_until('running')
+            log.info("elevate up: running, wait_until_not_moving")
             self.elevator.wait_while('running', timeout=4000)
+            log.info("elevate up: not_moving")
+
+            # If we are going up from 0, tilt the flipper just a bit so that when the
+            # cube comes back down later (whenever self.elevate(0) is called) the cube
+            # will slide all the way back against the upright flipper wall.  Without this
+            # sometimes 5x5x5 and larger cubes will slide just enough to cause the cube
+            # to jam up when trying to flip back to init.
+            if self.rows_in_turntable == 0:
+                FLIPPER_TILT_DEGREES = 30
+
+                if self.flipper_at_init:
+                    final_pos = self.flipper.position - FLIPPER_TILT_DEGREES
+                else:
+                    final_pos = self.flipper.position + FLIPPER_TILT_DEGREES
+
+                self.flipper.run_to_abs_pos(position_sp=final_pos,
+                                            speed_sp=self.FLIPPER_SPEED,
+                                            stop_action='hold')
+                #self.flipper.wait_until('running')
+                #self.flipper.wait_while('running', timeout=4000)
 
         # experimental
         '''
@@ -777,12 +834,13 @@ class CraneCuber3x3x3(object):
 
             cmd.append(png_filename)
             # log.info(' '.join(cmd))
+            log.info("fswebcam: start")
             subprocess.call(cmd)
+            log.info("fswebcam: end")
 
         if not os.path.exists(png_filename):
+            log.info("png_filename %s does not exist" % png_filename)
             self.shutdown_robot()
-
-        return png_filename
 
     def scan(self):
 
@@ -1542,6 +1600,19 @@ if __name__ == '__main__':
     cc.shutdown_robot()
     sys.exit(0)
     '''
+
+    # dwalton
+    # Uncomment to test elevate()
+    '''
+    cc = CraneCuber4x4x4(SERVER, args.emulate)
+    cc.init_motors()
+    cc.elevate(1)
+    log.info("Paused")
+    input("Paused")
+    cc.elevate(0)
+    sys.exit(0)
+    '''
+
     cc = None
     mts = MonitorTouchSensor()
     mts.start()
