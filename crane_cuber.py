@@ -6,7 +6,8 @@ A Rubiks cube solving robot made from EV3 + 42009
 """
 
 from copy import deepcopy
-from ev3dev.auto import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, TouchSensor, LargeMotor, MediumMotor
+from ev3dev2.sensor.lego import TouchSensor
+from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, MediumMotor
 from math import pi, sqrt
 from pprint import pformat
 from time import sleep
@@ -81,8 +82,11 @@ class DummyMotor(object):
 
     def __init__(self, address):
         self.address = address
-        self.connected = True
         self.position = 0
+        self.state = None
+
+    def __str__(self):
+        return "DummyMotor(%s)" % self.address
 
     def reset(self):
         pass
@@ -96,7 +100,10 @@ class DummyMotor(object):
     def run_to_abs_pos(self, speed_sp=None, stop_action=None, position_sp=None, ramp_up_sp=None, ramp_down_sp=None):
         pass
 
-    def wait_until(self, state):
+    def run_to_rel_pos(self, speed_sp=None, stop_action=None, position_sp=None, ramp_up_sp=None, ramp_down_sp=None):
+        pass
+
+    def wait_until(self, state, timeout=None):
         pass
 
     def wait_while(self, state, timeout=None):
@@ -124,19 +131,27 @@ class CraneCuber3x3x3(object):
         self.cube_for_resolver = None
         self.mts = None
         self.waiting_for_touch_sensor = Event()
+        self.move_north_to_top_calls = 0
+        self.move_south_to_top_calls = 0
+        self.move_east_to_top_calls = 0
+        self.move_west_to_top_calls = 0
+        self.move_down_to_top_calls = 0
 
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
             self.flipper = DummyMotor(OUTPUT_B)
             self.turntable = DummyMotor(OUTPUT_C)
             self.squisher = DummyMotor(OUTPUT_D)
-            self.touch_sensor = DummySensor()
         else:
             self.elevator = LargeMotor(OUTPUT_A)
             self.flipper = MediumMotor(OUTPUT_B)
             self.turntable = LargeMotor(OUTPUT_C)
             self.squisher = LargeMotor(OUTPUT_D)
-            self.touch_sensor = TouchSensor()
+
+        #self.elevator.total_distance = 0
+        #self.flipper.total_distance = 0
+        #self.turntable.total_distance = 0
+        #self.squisher.total_distance = 0
 
         self.motors = [self.elevator, self.flipper, self.turntable, self.squisher]
         self.rows_in_turntable = 0
@@ -179,12 +194,6 @@ class CraneCuber3x3x3(object):
         self.rows_in_turntable_to_count_as_face_turn = 2
 
     def init_motors(self):
-
-        for x in self.motors:
-            if not x.connected:
-                log.error("%s is not connected" % x)
-                sys.exit(1)
-            x.reset()
 
         # 'brake' stops but doesn't hold the motor in place
         # 'hold' stops and holds the motor in place
@@ -273,7 +282,7 @@ class CraneCuber3x3x3(object):
         log.error('Caught SIGINT')
         self.shutdown_robot()
 
-    def _rotate(self, final_pos, must_be_accurate):
+    def _rotate(self, final_pos, must_be_accurate, count_total_distance):
 
         if must_be_accurate:
             speed = self.TURNTABLE_SPEED_NORMAL
@@ -286,6 +295,9 @@ class CraneCuber3x3x3(object):
 
         start_pos = self.turntable.position
         delta = abs(final_pos - start_pos)
+
+        #if count_total_distance:
+        #    self.turntable.total_distance += delta
 
         if not delta:
             return
@@ -329,7 +341,7 @@ class CraneCuber3x3x3(object):
             (final_pos, speed, must_be_accurate,
              self.turntable, self.turntable.state, start_pos, self.turntable.position, self.squisher.position))
 
-    def rotate(self, clockwise, quarter_turns):
+    def rotate(self, clockwise, quarter_turns, count_total_distance=False):
 
         if self.shutdown_event.is_set():
             return
@@ -350,8 +362,8 @@ class CraneCuber3x3x3(object):
             turn_pos = current_pos + turn_degrees
             square_turntable_pos = round_to_quarter_turn(turn_pos + square_turntable_degrees)
 
-            self._rotate(turn_pos, False)
-            self._rotate(square_turntable_pos, False)
+            self._rotate(turn_pos, False, count_total_distance)
+            self._rotate(square_turntable_pos, False, count_total_distance)
 
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -373,13 +385,13 @@ class CraneCuber3x3x3(object):
             turn_pos = current_pos + turn_degrees
             square_cube_pos = turn_pos + square_cube_degrees
             square_turntable_pos = round_to_quarter_turn(square_cube_pos + square_turntable_degrees)
-            self._rotate(turn_pos, True)
+            self._rotate(turn_pos, True, count_total_distance)
 
             # The larger cubes are such a tight fit they do not need the wiggle move to square them up
             if self.rows_and_cols <= 5:
-                self._rotate(square_cube_pos, False)
+                self._rotate(square_cube_pos, False, count_total_distance)
 
-            self._rotate(square_turntable_pos, False)
+            self._rotate(square_turntable_pos, False, count_total_distance)
 
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -537,7 +549,7 @@ class CraneCuber3x3x3(object):
         # This shouldn't happen anymore now that we tilt the flipper a few
         # degrees when we elevate() the cube up so that it is flush against
         # the flipper when it comes back down.
-        if abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
+        if not self.emulate and abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
         if final_pos == 0 and current_pos != final_pos:
@@ -708,12 +720,13 @@ class CraneCuber3x3x3(object):
 
         start = datetime.datetime.now()
         init_pos = self.elevator.position
+        #self.elevator.total_distance += abs(final_pos - init_pos)
 
         # going down
         if rows < self.rows_in_turntable:
             # If we are lowering the cube we have to use a ramp_up because if we
             # drop the cube too suddenly it tends to jam up
-            log.info("elevate down, final_pos %s, run_to_abs()" % final_pos)
+            log.info("elevate down: final_pos %s, run_to_abs()" % final_pos)
 
             # drop the cube a few more rows
             if final_pos:
@@ -737,7 +750,7 @@ class CraneCuber3x3x3(object):
 
         # going up
         else:
-            log.info("elevate up, rows_in_turntable %s, run_to_abs()" % self.rows_in_turntable)
+            log.info("elevate up: rows_in_turntable %s, run_to_abs()" % self.rows_in_turntable)
 
             # raise the cube a few more rows
             if self.rows_in_turntable:
@@ -819,7 +832,7 @@ class CraneCuber3x3x3(object):
             os.unlink(png_filename)
 
         if self.emulate:
-            shutil.copy('/home/dwalton/lego/rubiks-cube-tracker/test/test-data/3x3x3-random-01/rubiks-side-%s.png' % name, png_filename)
+            shutil.copy('/home/dwalton/lego/rubiks-cube-tracker/test/test-data/7x7x7-random-02/rubiks-side-%s.png' % name, png_filename)
         else:
             # capture a single png from the webcam
             cmd = ['fswebcam',
@@ -948,6 +961,7 @@ class CraneCuber3x3x3(object):
         else:
             cmd = ['rubiks-color-resolver.py',
                    '--json',
+                   '--rgb',
                    '%s' % json.dumps(self.colors, sort_keys=True)]
 
         try:
@@ -966,62 +980,150 @@ class CraneCuber3x3x3(object):
         log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
                  (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
-    def move_north_to_top(self, rows=1):
-        log.info("move_north_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
-        if self.flipper_at_init:
-            self.elevate_max()
-            self.rotate(clockwise=True, quarter_turns=2)
+    def flip_with_elevator_clear(self):
 
-        self.elevate(0)
+        if self.rows_in_turntable:
+            raise Exception("Do not call when rows are in turntable (%d)" % self.rows_in_turntable)
+
+        ELEVATE_DEGREES_TO_CLEAR_FLIPPER = 60
+        init_pos = self.elevator.position
+        final_pos = init_pos - ELEVATE_DEGREES_TO_CLEAR_FLIPPER
+
+        # Raise the elevator up enough for the flipper to clear
+        self.elevator.run_to_abs_pos(position_sp=final_pos,
+                                     speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
+                                     ramp_up_sp=200,
+                                     ramp_down_sp=50,
+                                     stop_action='hold')
+
+        self.flip()
+
+        # Go back to where we were
+        self.elevator.run_to_abs_pos(position_sp=init_pos,
+                                     speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
+                                     ramp_up_sp=200,
+                                     ramp_down_sp=50,
+                                     stop_action='hold')
+
+        #self.elevator.total_distance += abs(final_pos - init_pos) * 2
+
+    def move_north_to_top(self, rows):
+        log.info("move_north_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
+
+        # There are four starting points
+        # flipper at init, elevator rows in turntable
+        # flipper at init, elevator no rows in turntable
+        # flipper not at init, elevator rows in turntable
+        # flipper not at init, elevator no rows in turntable
+
+        # We need to get to the state of
+        #   flipper not at init, elevator no rows in turntable
+
+        if self.flipper_at_init and self.rows_in_turntable:
+            self.flip()
+            self.elevate(0)
+
+        elif self.flipper_at_init and not self.rows_in_turntable:
+            self.flip_with_elevator_clear()
+
+        elif not self.flipper_at_init and self.rows_in_turntable:
+            self.elevate(0)
+
+        elif not self.flipper_at_init and not self.rows_in_turntable:
+            pass
+
+        else:
+            raise Exception("self.flipper_at_init %s, self.rows_in_turntable %s" % (self.flipper_at_init, self.rows_in_turntable))
+
         self.flip()
         self.elevate(rows)
+        self.move_north_to_top_calls += 1
 
-    def move_west_to_top(self, rows=1):
+    def move_west_to_top(self, rows):
         log.info("move_west_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
         self.elevate_max()
 
+        # Since we have the cube raised up as far as it can go, go
+        # ahead and squish it to re-align everything
+        if self.rows_and_cols < 6:
+            self.squish()
+
         if self.flipper_at_init:
-            self.rotate(clockwise=False, quarter_turns=1)
+            self.rotate(clockwise=False, quarter_turns=1, count_total_distance=True)
         else:
-            self.rotate(clockwise=True, quarter_turns=1)
+            self.rotate(clockwise=True, quarter_turns=1, count_total_distance=True)
 
         self.elevate(0)
         self.flip()
         self.elevate(rows)
+        self.move_west_to_top_calls += 1
 
-    def move_south_to_top(self, rows=1):
+    def move_south_to_top(self, rows):
         log.info("move_south_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
 
-        if not self.flipper_at_init:
-            self.elevate_max()
-            self.rotate(clockwise=True, quarter_turns=2)
+        # There are four starting points
+        # flipper at init, elevator rows in turntable
+        # flipper at init, elevator no rows in turntable
+        # flipper not at init, elevator rows in turntable
+        # flipper not at init, elevator no rows in turntable
 
-        self.elevate(0)
+        # We need to get to the state of
+        #   flipper at init, elevator no rows in turntable
+
+        if self.flipper_at_init and self.rows_in_turntable:
+            self.elevate(0)
+
+        elif self.flipper_at_init and not self.rows_in_turntable:
+            pass
+
+        elif not self.flipper_at_init and self.rows_in_turntable:
+            self.flip()
+            self.elevate(0)
+
+        elif not self.flipper_at_init and not self.rows_in_turntable:
+            self.flip_with_elevator_clear()
+
+        else:
+            raise Exception("self.flipper_at_init %s, self.rows_in_turntable %s" % (self.flipper_at_init, self.rows_in_turntable))
+
         self.flip()
         self.elevate(rows)
+        self.move_south_to_top_calls += 1
 
-    def move_east_to_top(self, rows=1):
+    def move_east_to_top(self, rows):
+        """
+        Each move east/west _to_top does 2.18 quarter turns due to having to over-rotate
+        and then rotate the turntable back a bit. What if we used the squisher to
+        hold the cube so that we didn't have to over-rotate at all? The challenge
+        there is the cube would be pressed up all the way against the side and would
+        be more likely to jam up on the elevate(0). I'll stick with what I have :)
+        """
         log.info("move_east_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
         self.elevate_max()
 
+        # Since we have the cube raised up as far as it can go, go
+        # ahead and squish it to re-align everything
+        if self.rows_and_cols < 6:
+            self.squish()
+
         if self.flipper_at_init:
-            self.rotate(clockwise=True, quarter_turns=1)
+            self.rotate(clockwise=True, quarter_turns=1, count_total_distance=True)
         else:
-            self.rotate(clockwise=False, quarter_turns=1)
+            self.rotate(clockwise=False, quarter_turns=1, count_total_distance=True)
 
         self.elevate(0)
         self.flip()
         self.elevate(rows)
+        self.move_east_to_top_calls += 1
 
-    def move_down_to_top(self, rows=1):
+    def move_down_to_top(self, rows):
         log.info("move_down_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
         self.elevate(0)
         self.flip()
-        self.elevate_max()
-        self.flip() # empty flip
-        self.elevate(0)
+        self.flip_with_elevator_clear()
         self.flip()
         self.elevate(rows)
+        self.move_down_to_top_calls += 1
 
     def get_direction(self, target_face):
         """
@@ -1084,10 +1186,38 @@ class CraneCuber3x3x3(object):
         # 3x3x3 - works just fine
         # 4x4x4 - does not work...cube doesn't solve...need to investigate
         # 5x5x5 - works just fine
-        if self.rows_and_cols in (3, 5):
+        if self.rows_and_cols in (3, 5, 7):
             use_shortcut = True
         else:
             use_shortcut = False
+
+        '''
+        For our 7x7x7 cube in --emulate
+
+        without use_shortcut
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: DummyMotor(outA): elevator moved 75740 degrees total (210 rotations)
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: DummyMotor(outC): turntable moved 89240 degrees total (212 quarter turns)
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 53 move_north_to_top_calls
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 58 move_south_to_top_calls
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 54 move_east_to_top_calls
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 43 move_west_to_top_calls
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 36 move_down_to_top_calls
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 244 move_calls total
+2018-02-02 12:51:33,120 crane_cuber.py     INFO: 97 move_calls (east/west) total
+
+        with use_shortcut...saves 36 move_down_to_top() calls
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: DummyMotor(outA): elevator moved 73382 degrees total (203 rotations)
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: DummyMotor(outC): turntable moved 92920 degrees total (221 quarter turns)
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: 49 move_north_to_top_calls
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: 71 move_south_to_top_calls
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: 56 move_east_to_top_calls
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: 45 move_west_to_top_calls
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: 0 move_down_to_top_calls
+2018-02-02 12:52:07,943 crane_cuber.py     INFO: 221 move_calls total
+2018-02-02 12:52:07,944 crane_cuber.py     INFO: 101 move_calls (east/west) total
+
+        Each each east/west move is 2.18 quarter turns
+        '''
 
         for (index, action) in enumerate(actions):
             desc = "Move %d/%d : %s" % (index, total_actions, action)
@@ -1139,7 +1269,7 @@ class CraneCuber3x3x3(object):
                 pass
 
             elif rows >= self.rows_in_turntable_to_count_as_face_turn:
-                raise Exception("CraneCuber does not yet support %s for this size cube" % action)
+                raise Exception("CraneCuber does not support %s for this size cube" % action)
 
             if self.facing_up == 'U':
                 if target_face == 'U':
@@ -1213,8 +1343,12 @@ class CraneCuber3x3x3(object):
                     raise Exception("Unsupported direction %s" % direction)
 
             self.rotate(clockwise, quarter_turns)
-            self.elevate(rows=self.rows_and_cols)
-            self.squish()
+
+            # Can we avoid this squish() call?  Doing this everytime really slows things down.
+            # We can on smaller cubes but the big cubes jam up too easily.
+            if self.rows_and_cols >= 6:
+                self.elevate(rows=self.rows_and_cols)
+                self.squish()
 
             # Every 10 moves make sure the squisher hasn't crept out of place
             if index % 10 == 0:
@@ -1222,9 +1356,6 @@ class CraneCuber3x3x3(object):
 
             log.info("\n\n\n\n")
             moves += 1
-
-            if self.emulate:
-                sleep(1)
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -1269,22 +1400,27 @@ class CraneCuber3x3x3(object):
         if self.shutdown_event.is_set():
             return
 
-        if self.SERVER:
-            cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s"' % (self.SERVER, self.cube_for_resolver)
+        if self.emulate:
+            actions = """U2 3Uw B' 3Rw' 3Lw D 3Lw' D' 3Lw 3Fw2 D 3Bw' U' Lw' 3Fw2 U 3Rw2 Lw' D B' U' Lw' U Fw' Uw2 Bw 3Rw2 Fw R' 3Uw2 Fw' U Uw2 Bw' Uw2 L2 Rw' 3Dw 3Uw' D' 3Rw2 3Lw2 Fw' Rw' 3Uw2 3Bw2 3Dw' R' F 3Dw2 3Uw B' 3Dw' Uw' Dw F Uw' B 3Uw2 Dw' R Uw' 3Fw2 3Rw2 R' Bw2 F Uw' 3Bw2 3Fw2 B2 L' 3Dw2 3Uw2 B' R Dw' U Lw2 3Fw2 Bw2 Fw2 U' 3Bw2 3Rw2 Dw2 L' 3Uw2 Dw2 L 3Dw2 L' Dw2 R Uw2 L' 3Uw2 Uw2 F' 3Dw2 F' B 3Uw2 F 3Uw2 3Dw2 B 3Uw2 B' 3Uw2 Dw2 U2 Bw D2 U Bw Uw' Rw Uw Rw Lw2 Fw' Lw2 Uw' Fw2 Uw2 B' Uw L' Dw' U Uw2 Bw2 U L' Bw2 U' Uw2 L' Lw2 F' Uw2 3Lw2 F2 3Lw2 D 3Rw2 B2 3Rw2 F' R2 B' B2 3Lw2 D2 B2 3Rw2 D' R2 D' B2 L2 3Lw2 U' 3Rw U2 3Rw' B2 3Lw B2 D2 U2 3Rw 3Uw 3Dw2 B2 F2 L2 3Uw 3Dw2 B2 3Uw L2 3Dw' 3Bw' U2 3Bw2 U2 R2 U2 R2 3Fw' U2 3Bw' L2 3Fw U2 2Bw U' F' B2 U 2Bw' D L' L2 U2 2Rw2 B D2 B' D2 2Rw2 B' 2Bw' L2 R2 U2 2Bw' R2 U2 2Bw D2 2Fw' 2Lw B2 D2 U2 2Lw' D2 2Lw F2 2Rw' B2 2Rw2 2Dw2 F2 2Dw' F2 2Dw' F2 2Dw' R2 2Uw F2 2Uw' U' R F U' L2 U L2 B L' U2 R' U B2 D2 F2 B2 R2 U2 R2 U B2""".split()
+            self.rows_and_cols = 7
+
         else:
-            cmd = 'cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s' % ''.join(self.cube_for_resolver)
+            if self.SERVER:
+                cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s"' % (self.SERVER, self.cube_for_resolver)
+            else:
+                cmd = 'cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s' % ''.join(self.cube_for_resolver)
 
-        log.info(cmd)
-        output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
-        actions = []
+            log.info(cmd)
+            output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
+            actions = []
 
-        for line in output.splitlines():
-            line = line.strip()
-            re_solution = re.search('^Solution:\s+(.*)$', line)
+            for line in output.splitlines():
+                line = line.strip()
+                re_solution = re.search('^Solution:\s+(.*)$', line)
 
-            if re_solution:
-                actions = re_solution.group(1).strip().split()
-                break
+                if re_solution:
+                    actions = re_solution.group(1).strip().split()
+                    break
 
         self.run_actions(actions)
         self.elevate(0)
@@ -1295,7 +1431,7 @@ class CraneCuber3x3x3(object):
 
         # Rotate back to 0
         square_pos = round_to_quarter_turn(self.turntable.position)
-        self._rotate(square_pos, True)
+        self._rotate(square_pos, True, False)
 
     def test_foo(self):
         foo = ("3Uw", )
@@ -1506,12 +1642,17 @@ class CraneCuber7x7x7(CraneCuber3x3x3):
 
 class MonitorTouchSensor(Thread):
 
-    def __init__(self):
+    def __init__(self, emulate):
         Thread.__init__(self)
         self.cc = None
         self.shutdown_event = Event()
-        self.touch_sensor = TouchSensor()
         self.waiting_for_release = False
+
+        if emulate:
+            self.touch_sensor = DummySensor()
+        else:
+            self.touch_sensor = TouchSensor()
+
 
     def __str__(self):
         return "MonitorTouchSensor"
@@ -1601,7 +1742,6 @@ if __name__ == '__main__':
     sys.exit(0)
     '''
 
-    # dwalton
     # Uncomment to test elevate()
     '''
     cc = CraneCuber4x4x4(SERVER, args.emulate)
@@ -1614,7 +1754,7 @@ if __name__ == '__main__':
     '''
 
     cc = None
-    mts = MonitorTouchSensor()
+    mts = MonitorTouchSensor(args.emulate)
     mts.start()
 
     try:
@@ -1625,9 +1765,10 @@ if __name__ == '__main__':
             mts.cc = cc
             cc.mts = mts
             cc.init_motors()
-            cc.waiting_for_touch_sensor.set()
-            log.info('waiting for TouchSensor press')
-            print('waiting for TouchSensor press')
+
+            if not args.emulate:
+                cc.waiting_for_touch_sensor.set()
+                log.info('waiting for TouchSensor press')
 
             while not cc.shutdown_event.is_set() and cc.waiting_for_touch_sensor.is_set():
                 sleep (0.1)
@@ -1670,6 +1811,15 @@ if __name__ == '__main__':
             if cc.shutdown_event.is_set() or args.emulate:
                 break
 
+        #log.info("%s: elevator moved %d degrees total (%d rotations)" % (cc.elevator, cc.elevator.total_distance, int(cc.elevator.total_distance/360)))
+        #log.info("%s: turntable moved %d degrees total (%d quarter turns)" % (cc.turntable, cc.turntable.total_distance, int(cc.turntable.total_distance/TURNTABLE_TURN_DEGREES)))
+        log.info("%d move_north_to_top_calls" % cc.move_north_to_top_calls)
+        log.info("%d move_south_to_top_calls" % cc.move_south_to_top_calls)
+        log.info("%d move_east_to_top_calls" % cc.move_east_to_top_calls)
+        log.info("%d move_west_to_top_calls" % cc.move_west_to_top_calls)
+        log.info("%d move_down_to_top_calls" % cc.move_down_to_top_calls)
+        log.info("%d move_calls total" % (cc.move_north_to_top_calls + cc.move_south_to_top_calls + cc.move_east_to_top_calls + cc.move_west_to_top_calls + cc.move_down_to_top_calls))
+        log.info("%d move_calls (east/west) total" % (cc.move_east_to_top_calls + cc.move_west_to_top_calls))
         cc.shutdown_robot()
 
     except Exception as e:
