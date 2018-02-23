@@ -18,6 +18,10 @@ from threading import Event
 SCRATCHPAD_DIR = '/tmp/cranecuberd/'
 
 
+class BrokenSocket(Exception):
+    pass
+
+
 def open_tcp_socket(address='0.0.0.0', port=10000):
     """
     open/return a TCP socket
@@ -85,97 +89,121 @@ class CraneCuberDaemon(object):
                         # 4 is 'Interrupted system call', a.k.a. SIGINT.
                         # The user wants to stop cranecuberd.
                         log.info("socket.accept() caught signal, starting shutdown")
-                        self.shutdown_event.set()
-                        continue
+                        raise BrokenSocket("socket.accept() caught signal, starting shutdown")
                     else:
-                        log.info("socket %s hit error\n%s" % (server_address, e))
+                        log.info("socket hit error\n%s" % e)
                         tcp_socket.close()
                         tcp_socket = open_tcp_socket()
                         continue
 
-                # RX the request from the client
-                data = connection.recv(4096)
+                total_data = []
 
-                # If the client is using python2 data will be a str but if they
-                # are using python3 data will be encoded and must be decoded to
-                # a str
-                if not isinstance(data, str):
-                    data = data.decode()
+                # RX the entire packet
+                while True:
+                    data = connection.recv(4096)
 
-                data = data.strip()
-                log.info("RXed %s" % data)
+                    # If the client is using python2 data will be a str but if they
+                    # are using python3 data will be encoded and must be decoded to
+                    # a str
+                    if not isinstance(data, str):
+                        data = data.decode()
 
-                if data.startswith('TAKE_PICTURE'):
-                    side_name = data.strip().split(':')[1]
-                    png_filename = os.path.join(SCRATCHPAD_DIR, 'rubiks-side-%s.png' % side_name)
-                    camera = cv2.VideoCapture(self.dev_video)
+                    data = data.strip()
+                    log.info("RXed %s" % data)
 
-                    if side_name == 'F':
+                    total_data.append(data)
+                    data = ''.join(total_data)
 
-                        for filename in os.listdir(SCRATCHPAD_DIR):
-                            if filename.endswith('.png'):
-                                os.unlink(os.path.join(SCRATCHPAD_DIR, filename))
+                    # Do we have the entire packet?
+                    if data.startswith('<START>') and data.endswith('<END>'):
 
-                        brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
-                        contrast = camera.get(cv2.CAP_PROP_CONTRAST)
-                        saturation = camera.get(cv2.CAP_PROP_SATURATION)
-                        hue = camera.get(cv2.CAP_PROP_HUE)
-                        gain = camera.get(cv2.CAP_PROP_GAIN)
-                        exposure = camera.get(cv2.CAP_PROP_EXPOSURE)
-                    else:
-                        camera.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
-                        camera.set(cv2.CAP_PROP_CONTRAST, contrast)
-                        camera.set(cv2.CAP_PROP_SATURATION, saturation)
-                        camera.set(cv2.CAP_PROP_HUE, hue)
-                        camera.set(cv2.CAP_PROP_GAIN, gain)
-                        camera.set(cv2.CAP_PROP_EXPOSURE, exposure)
+                        # Remove the <START> and <END>
+                        data = data[7:-5]
 
-                    (retval, img) = camera.read()
-                    del(camera)
-                    camera = None
+                        if data.startswith('TAKE_PICTURE'):
+                            side_name = data.strip().split(':')[1]
+                            png_filename = os.path.join(SCRATCHPAD_DIR, 'rubiks-side-%s.png' % side_name)
+                            camera = cv2.VideoCapture(self.dev_video)
 
-                    if retval:
-                        # Images for sides U and D need to be rotated 90 degrees
-                        if side_name in ('U', 'D'):
-                            img = rotate_image(img, 90)
+                            if side_name == 'F':
 
-                        # Save the image to disk
-                        cv2.imwrite(png_filename, img)
+                                for filename in os.listdir(SCRATCHPAD_DIR):
+                                    if filename.endswith('.png'):
+                                        os.unlink(os.path.join(SCRATCHPAD_DIR, filename))
 
-                        size = os.path.getsize(png_filename)
+                                brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
+                                contrast = camera.get(cv2.CAP_PROP_CONTRAST)
+                                saturation = camera.get(cv2.CAP_PROP_SATURATION)
+                                #hue = camera.get(cv2.CAP_PROP_HUE)
+                                gain = camera.get(cv2.CAP_PROP_GAIN)
+                                #exposure = camera.get(cv2.CAP_PROP_EXPOSURE)
+                            else:
+                                camera.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
+                                camera.set(cv2.CAP_PROP_CONTRAST, contrast)
+                                camera.set(cv2.CAP_PROP_SATURATION, saturation)
+                                #camera.set(cv2.CAP_PROP_HUE, hue)
+                                camera.set(cv2.CAP_PROP_GAIN, gain)
+                                #camera.set(cv2.CAP_PROP_EXPOSURE, exposure)
 
-                        if size:
-                            response = 'FINISHED: image %s is %d bytes' % (png_filename, size)
+                            (retval, img) = camera.read()
+                            del(camera)
+                            camera = None
+
+                            if retval:
+                                # Images for sides U and D need to be rotated 90 degrees
+                                if side_name in ('U', 'D'):
+                                    img = rotate_image(img, 90)
+
+                                # Save the image to disk
+                                cv2.imwrite(png_filename, img)
+
+                                size = os.path.getsize(png_filename)
+
+                                if size:
+                                    response = 'FINISHED: image %s is %d bytes' % (png_filename, size)
+                                else:
+                                    response = 'ERROR: image %s is 0 bytes' % png_filename
+                            else:
+                                response = 'ERROR: image %s camera.read() failed' % png_filename
+
+                        elif data == 'GET_RGB_COLORS':
+                            cmd = ['rubiks-cube-tracker.py', '--directory', SCRATCHPAD_DIR]
+                            log.info("cmd: %s" % ' '.join(cmd))
+                            response = subprocess.check_output(cmd).strip()
+
+                        elif data.startswith('GET_CUBE_STATE:'):
+                            cmd = ['rubiks-color-resolver.py', '--json', '--rgb', data[len('GET_CUBE_STATE:'):]]
+                            log.info("cmd: %s" % ' '.join(cmd))
+                            response = subprocess.check_output(cmd).strip()
+
+                        elif data == 'GET_CUBE_STATE_FROM_PICS':
+                            # Have not tested this
+                            cmd = ['rubiks-cube-tracker.py', '--directory', SCRATCHPAD_DIR]
+                            log.info("cmd: %s" % ' '.join(cmd))
+                            rgb = subprocess.check_output(cmd).strip()
+
+                            cmd = ['rubiks-color-resolver.py', '--json', '--rgb', rgb]
+                            log.info("cmd: %s" % ' '.join(cmd))
+                            response = subprocess.check_output(cmd).strip()
+
+                        elif data.startswith('GET_SOLUTION:'):
+                            cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s" % data.split(':')[1]
+                            log.info("cmd: %s" % cmd)
+                            response = subprocess.check_output(cmd, shell=True).strip()
+
+                        elif data == 'PING':
+                            response = 'REPLY'
+
                         else:
-                            response = 'ERROR: image %s is 0 bytes' % png_filename
-                    else:
-                        response = 'ERROR: image %s camera.read() failed' % png_filename
+                            log.warning("RXed %s (not supported)" % data)
 
-                elif data == 'GET_RGB_COLORS':
-                    cmd = ['rubiks-cube-tracker.py', '--directory', SCRATCHPAD_DIR]
-                    log.info("cmd: %s" % ' '.join(cmd))
-                    response = subprocess.check_output(cmd).strip()
+                        # TX our response and close the socket
+                        connection.send(response)
+                        connection.close()
+                        log.info("TXed %s response %s" % (data, response))
 
-                elif data.startswith('GET_CUBE_STATE:'):
-                    cmd = ['rubiks-color-resolver.py', '--json', '--rgb', data[len('GET_CUBE_STATE:'):]]
-                    log.info("cmd: %s" % ' '.join(cmd))
-                    response = subprocess.check_output(cmd).strip()
-
-                elif data.startswith('GET_SOLUTION:'):
-                    cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s" % data.split(':')[1]
-                    log.info("cmd: %s" % cmd)
-                    response = subprocess.check_output(cmd, shell=True).strip()
-
-                elif data == 'PING':
-                    response = 'REPLY'
-
-                else:
-                    log.warning("RXed %s (not supported)" % data)
-
-                # TX our response and close the socket
-                connection.send(response)
-                connection.close()
-                log.info("TXed %s response %s" % (data, response))
+                        # We have the entire msg so break out of the inside 'while True' loop
+                        break
 
             except Exception as e:
                 log.exception(e)
