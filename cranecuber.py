@@ -10,6 +10,7 @@ from ev3dev2.sensor.lego import TouchSensor
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, MediumMotor
 from math import pi, sqrt
 from pprint import pformat
+from select import select
 from time import sleep
 from threading import Thread, Event
 from time import sleep
@@ -22,6 +23,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 
@@ -72,6 +74,53 @@ def convert_key_strings_to_int(data):
         else:
             result[key] = value
     return result
+
+
+class BrokenSocket(Exception):
+    pass
+
+
+def send_command(ip, port, cmd):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_address = (ip, port)
+
+    try:
+        sock.connect(server_address)
+    except socket.error:
+        raise Exception("Could not connect to %s" % str(server_address))
+
+    cmd = '<START>' + cmd + '<END>'
+    sock.sendall(cmd.encode()) # python3
+    log.info("TXed %s to cranecuberd" % cmd)
+
+    sock.setblocking(0)
+    timeout = 30
+    total_data = []
+
+    while True:
+        ready = select([sock], [], [], timeout)
+
+        if ready[0]:
+            data = sock.recv(4096)
+
+            if data:
+                data = data.decode()
+
+                if data.startswith('ERROR'):
+                    raise Exception("cranecuberd %s" % data)
+
+                total_data.append(data)
+            else:
+                break
+        else:
+            raise BrokenSocket("did not receive a response within %s seconds" % timeout)
+
+    total_data = ''.join(total_data)
+    log.info("RXed %s response" % total_data)
+    sock.close()
+    del(sock)
+
+    return total_data
 
 
 class CubeJammed(Exception):
@@ -233,23 +282,8 @@ class CraneCuber3x3x3(object):
         self.turntable.reset()
         self.turntable.stop(stop_action='hold')
 
-        log.info("Initialize squisher%s" % self.flipper)
-        # positive closes the squisher
-        # negative opens the squisher
-        '''
-        self.squisher.run_forever(speed_sp=-60, stop_action='brake')
-        self.squisher.wait_until('running')
-        self.squisher.wait_until('stalled')
-        self.squisher.stop()
-        self.squisher.reset()
-
-        # Relieve tension
-        self.squisher.run_to_abs_pos(position_sp=60,
-                                     speed_sp=30)
-        self.squisher.wait_until('running')
-        self.squisher.wait_until_not_moving(timeout=2000)
-        '''
-        self.squisher.reset()
+        log.info("Initialize squisher %s" % self.squisher)
+        self.squisher_reset()
         self.squisher.stop(stop_action='brake')
 
     def shutdown_robot(self):
@@ -265,6 +299,7 @@ class CraneCuber3x3x3(object):
             self.mts.shutdown_event.set()
             self.mts.join()
             self.mts = None
+            log.info('shutting down mts complete')
 
         self.elevate(0)
 
@@ -466,28 +501,33 @@ class CraneCuber3x3x3(object):
         if self.shutdown_event.is_set():
             return
 
-        # Already settled nothing to do
-        if self.flipper.position == 0:
+        log.info("flip_settle_cube run_to_abs_pos -60")
+        self.flipper.run_to_abs_pos(position_sp=-60,
+                                    speed_sp=self.FLIPPER_SPEED,
+                                    ramp_up_sp=0,
+                                    ramp_down_sp=0,
+                                    stop_action='hold')
+        self.flipper.wait_until('running')
+        self.flipper.wait_until_not_moving(timeout=2000)
+
+        if self.shutdown_event.is_set():
             return
 
-        log.info("flip_settle_cube run_to_abs_pos")
+        log.info("flip_settle_cube run_to_abs_pos 0")
         self.flipper.run_to_abs_pos(position_sp=0,
                                     speed_sp=self.FLIPPER_SPEED/2,
                                     ramp_up_sp=0,
                                     ramp_down_sp=500,
                                     stop_action='hold')
-        log.info("flip_settle_cube wait_until running")
         self.flipper.wait_until('running')
-        log.info("flip_settle_cube running wait_until_not_moving")
         self.flipper.wait_until_not_moving(timeout=2000)
-        log.info("flip_settle_cube not moving")
 
     def flip_to_init(self):
 
         if abs(self.flipper.position) >= abs(int(FLIPPER_DEGREES/2)):
             self.flip()
 
-    def flip(self):
+    def flip(self, slow=False):
 
         if self.shutdown_event.is_set():
             log.info("flip shutdown_event is set")
@@ -517,8 +557,14 @@ class CraneCuber3x3x3(object):
         log.info("flipper run_to_abs_pos(), rows_in_turntable %s, flipper_at_init %s, init_pos %s, final_pos %s" % (self.rows_in_turntable, self.flipper_at_init, init_pos, final_pos))
 
         if self.rows_in_turntable == 0:
+
+            if slow:
+                flipper_speed = int(self.FLIPPER_SPEED / 4)
+            else:
+                flipper_speed = self.FLIPPER_SPEED
+
             self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                        speed_sp=self.FLIPPER_SPEED,
+                                        speed_sp=flipper_speed,
                                         ramp_up_sp=0,
                                         ramp_down_sp=500,
                                         stop_action='hold')
@@ -770,41 +816,40 @@ class CraneCuber3x3x3(object):
             log.info("elevate up: wait_until running")
             self.elevator.wait_until('running')
             log.info("elevate up: running, wait_until_not_moving")
-            self.elevator.wait_while('running', timeout=4000)
+            self.elevator.wait_until_not_moving(timeout=3000)
             log.info("elevate up: not_moving")
 
-            # If we are going up from 0, tilt the flipper just a bit so that when the
-            # cube comes back down later (whenever self.elevate(0) is called) the cube
-            # will slide all the way back against the upright flipper wall.  Without this
-            # sometimes 5x5x5 and larger cubes will slide just enough to cause the cube
-            # to jam up when trying to flip back to init.
-            if self.rows_in_turntable == 0:
-                FLIPPER_TILT_DEGREES = 30
-
-                if self.flipper_at_init:
-                    final_pos = self.flipper.position - FLIPPER_TILT_DEGREES
-                else:
-                    final_pos = self.flipper.position + FLIPPER_TILT_DEGREES
-
-                self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                            speed_sp=self.FLIPPER_SPEED,
-                                            stop_action='hold')
-                #self.flipper.wait_until('running')
-                #self.flipper.wait_while('running', timeout=4000)
-
-        # experimental
-        '''
-        if rows > self.rows_in_turntable:
+            # Did we jam up?
             current_pos = self.elevator.position
             delta = abs(current_pos - init_pos)
             delta_target = abs(final_pos - init_pos)
 
-            # Did we jam up?
             if delta < (delta_target * 0.90):
-                log.warning("elevate jammed up, only moved %d, should have moved %d" % (delta, delta_target))
-                self.shutdown_robot()
-                return
-        '''
+                log.warning("elevate jammed up, only moved %d, should have moved %d...attempting to clear" % (delta, delta_target))
+                self.elevator.run_to_abs_pos(position_sp=0,
+                                             speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
+                                             stop_action='hold')
+                self.elevator.wait_until('running')
+                self.elevator.wait_until_not_moving(timeout=3000)
+
+                self.squisher_reset()
+                self.flip(slow=True)
+                self.flip(slow=True)
+
+                self.elevator.run_to_abs_pos(position_sp=final_pos,
+                                             speed_sp=self.ELEVATOR_SPEED_UP_FAST,
+                                             ramp_up_sp=200, # ramp_up here so we don't slam into the cube at full speed
+                                             ramp_down_sp=50, # ramp_down so we stop at the right spot
+                                             stop_action='hold')
+                self.elevator.wait_until('running')
+                self.elevator.wait_until_not_moving(timeout=3000)
+
+                current_pos = self.elevator.position
+                delta = abs(current_pos - init_pos)
+                delta_target = abs(final_pos - init_pos)
+
+                if delta < (delta_target * 0.90):
+                    raise CubeJammed("elevate jammed up, only moved %d, should have moved %d" % (delta, delta_target))
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -828,32 +873,10 @@ class CraneCuber3x3x3(object):
         log.info("scan_face() %s" % name)
         png_filename = '/tmp/rubiks-side-%s.png' % name
 
-        if os.path.exists(png_filename):
-            os.unlink(png_filename)
-
         if self.emulate:
             shutil.copy('/home/dwalton/lego/rubiks-cube-tracker/test/test-data/7x7x7-random-02/rubiks-side-%s.png' % name, png_filename)
         else:
-            # capture a single png from the webcam
-            cmd = ['fswebcam',
-                   '--config',
-                   'fswebcam.conf']
-
-            # The L, F, R, and B sides are simple, for the U and D sides the cube in
-            # the png is rotated by 90 degrees so tell fswebcam to rotate 270
-            if name in ('U', 'D'):
-                cmd.append('--rotate')
-                cmd.append('270')
-
-            cmd.append(png_filename)
-            # log.info(' '.join(cmd))
-            log.info("fswebcam: start")
-            subprocess.call(cmd)
-            log.info("fswebcam: end")
-
-        if not os.path.exists(png_filename):
-            log.info("png_filename %s does not exist" % png_filename)
-            self.shutdown_robot()
+            send_command(self.SERVER, 10000, "TAKE_PICTURE:%s" % name)
 
     def scan(self):
 
@@ -862,6 +885,7 @@ class CraneCuber3x3x3(object):
 
         log.info("scan()")
         self.colors = {}
+        self.flip_settle_cube()
         self.scan_face('F')
 
         self.elevate_max()
@@ -907,71 +931,31 @@ class CraneCuber3x3x3(object):
         self.elevate(0)
         self.flip_settle_cube()
 
+        #log.info("Paused")
+        #input("Paused")
+
     def get_colors(self):
 
         if self.shutdown_event.is_set():
             return
 
-        if self.SERVER:
-            cmd = 'scp /tmp/rubiks-side-*.png robot@%s:/tmp/' % self.SERVER
-            log.info(cmd)
-            subprocess.call(cmd, shell=True)
-            cmd = 'ssh robot@%s rubiks-cube-tracker.py --directory /tmp/' % self.SERVER
-        else:
-            # There isn't opencv support in python3 yet so this has to remain a subprocess call for now
-            cmd = 'rubiks-cube-tracker.py --directory /tmp/'
+        # Ask cranecuberd to extract the colors from the six cube images
+        output = send_command(self.SERVER, 10000, "GET_RGB_COLORS").strip()
 
-        output = ''
-        try:
-            log.info(cmd)
-            output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
-            log.info(output)
-            self.colors = json.loads(output)
-        except Exception as e:
-            log.warning("rubiks-cube-tracker.py failed:")
-            log.warning(output)
-            log.exception(e)
-            self.shutdown_robot()
-            return
+        if not output:
+            raise Exception("GET_RGB_COLORS did not return any output")
+
+        log.info("GET_RGB_COLORS\n%s\n" % output)
+        self.colors = json.loads(output)
 
     def resolve_colors(self):
 
         if self.shutdown_event.is_set():
             return
 
-        # log.info("RGB json:\n%s\n" % json.dumps(self.colors, sort_keys=True))
-        # log.info("RGB pformat:\n%s\n" % pformat(self.colors))
-
-        if self.SERVER:
-            # Trying to pass json via the command line over ssh is a PITA so
-            # write it to a file and scp the file over to the server
-            with open('/tmp/crane-cuber.json', 'w') as fh:
-                json.dump(self.colors, fh, sort_keys=True, indent=4)
-
-            cmd = ['scp', '/tmp/crane-cuber.json', 'robot@%s:/tmp/' % self.SERVER]
-            log.info(' '.join(cmd))
-            subprocess.call(cmd)
-
-            cmd = ['ssh',
-                   'robot@%s' % self.SERVER,
-                   'rubiks-color-resolver.py',
-                   '--json',
-                   '--filename',
-                   '/tmp/crane-cuber.json']
-        else:
-            cmd = ['rubiks-color-resolver.py',
-                   '--json',
-                   '--rgb',
-                   '%s' % json.dumps(self.colors, sort_keys=True)]
-
-        try:
-            log.info(' '.join(cmd))
-            self.resolved_colors = json.loads(subprocess.check_output(cmd).decode('ascii').strip())
-        except Exception as e:
-            log.warning("rubiks-color-resolver.py failed")
-            log.exception(e)
-            self.shutdown_robot()
-            return
+        cmd = "GET_CUBE_STATE:%s" % json.dumps(self.colors)
+        output = send_command(self.SERVER, 10000, cmd)
+        self.resolved_colors = json.loads(output)
 
         self.resolved_colors['squares'] = convert_key_strings_to_int(self.resolved_colors['squares'])
         self.cube_for_resolver = self.resolved_colors['kociemba']
@@ -985,27 +969,9 @@ class CraneCuber3x3x3(object):
         if self.rows_in_turntable:
             raise Exception("Do not call when rows are in turntable (%d)" % self.rows_in_turntable)
 
-        ELEVATE_DEGREES_TO_CLEAR_FLIPPER = 60
-        init_pos = self.elevator.position
-        final_pos = init_pos - ELEVATE_DEGREES_TO_CLEAR_FLIPPER
-
-        # Raise the elevator up enough for the flipper to clear
-        self.elevator.run_to_abs_pos(position_sp=final_pos,
-                                     speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
-                                     ramp_up_sp=200,
-                                     ramp_down_sp=50,
-                                     stop_action='hold')
-
+        self.elevate(1)
         self.flip()
-
-        # Go back to where we were
-        self.elevator.run_to_abs_pos(position_sp=init_pos,
-                                     speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
-                                     ramp_up_sp=200,
-                                     ramp_down_sp=50,
-                                     stop_action='hold')
-
-        #self.elevator.total_distance += abs(final_pos - init_pos) * 2
+        self.elevate(0)
 
     def move_north_to_top(self, rows):
         log.info("move_north_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
@@ -1154,7 +1120,7 @@ class CraneCuber3x3x3(object):
                          self.facing_north, self.facing_west, self.facing_south, self.facing_east,
                          self.facing_up, self.facing_down))
 
-    def run_actions(self, actions):
+    def run_solution(self, actions):
         """
         action will be a series of moves such as
         D'  B2  Rw' Uw  R2  Fw  D   Rw2 B   R2  Uw  D2  Rw2 U2  Fw2 U2  L   F
@@ -1261,9 +1227,9 @@ class CraneCuber3x3x3(object):
                 target_face = action[0]
                 rows = 1
 
-            #log.info("Up %s, Down %s, North %s, West %s, South %s, East %s, target_face %s, rows %d, quarter_turns %d, clockwise %s" %
-            #        (self.facing_up, self.facing_down, self.facing_north, self.facing_west, self.facing_south, self.facing_east,
-            #         target_face, rows, quarter_turns, clockwise))
+            log.info("Up %s, Down %s, North %s, West %s, South %s, East %s, target_face %s, rows %d, quarter_turns %d, clockwise %s" %
+                    (self.facing_up, self.facing_down, self.facing_north, self.facing_west, self.facing_south, self.facing_east,
+                     target_face, rows, quarter_turns, clockwise))
 
             if rows == self.rows_and_cols:
                 pass
@@ -1350,18 +1316,24 @@ class CraneCuber3x3x3(object):
                 self.elevate(rows=self.rows_and_cols)
                 self.squish()
 
-            # Every 10 moves make sure the squisher hasn't crept out of place
-            if index % 10 == 0:
+            # Every 25 moves make sure the squisher hasn't crept out of place
+            if index % 25 == 0:
                 self.squisher_reset()
 
+            log.info("Up %s, Down %s, North %s, West %s, South %s, East %s" %
+                    (self.facing_up, self.facing_down, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
             log.info("\n\n\n\n")
             moves += 1
+            #log.info("Paused")
+            #input("Paused")
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
-        log.info("SOLVED!! %ds in elevate, %ds in flip, %ds in rotate, %ds in run_actions, %d moves, avg %dms per move" %
-            (int(self.time_elevate/1000), int(self.time_flip/1000), int(self.time_rotate/1000),
-             int(delta_ms/1000), moves, int(delta_ms/moves)))
+
+        if moves:
+            log.info("SOLVED!! %ds in elevate, %ds in flip, %ds in rotate, %ds in run_solution, %d moves, avg %dms per move" %
+                (int(self.time_elevate/1000), int(self.time_flip/1000), int(self.time_rotate/1000),
+                 int(delta_ms/1000), moves, int(delta_ms/moves)))
 
     def compress_actions(self, actions):
         actions = actions.replace("Uw Uw Uw ", "Uw' ")
@@ -1401,28 +1373,13 @@ class CraneCuber3x3x3(object):
             return
 
         if self.emulate:
-            actions = """U2 3Uw B' 3Rw' 3Lw D 3Lw' D' 3Lw 3Fw2 D 3Bw' U' Lw' 3Fw2 U 3Rw2 Lw' D B' U' Lw' U Fw' Uw2 Bw 3Rw2 Fw R' 3Uw2 Fw' U Uw2 Bw' Uw2 L2 Rw' 3Dw 3Uw' D' 3Rw2 3Lw2 Fw' Rw' 3Uw2 3Bw2 3Dw' R' F 3Dw2 3Uw B' 3Dw' Uw' Dw F Uw' B 3Uw2 Dw' R Uw' 3Fw2 3Rw2 R' Bw2 F Uw' 3Bw2 3Fw2 B2 L' 3Dw2 3Uw2 B' R Dw' U Lw2 3Fw2 Bw2 Fw2 U' 3Bw2 3Rw2 Dw2 L' 3Uw2 Dw2 L 3Dw2 L' Dw2 R Uw2 L' 3Uw2 Uw2 F' 3Dw2 F' B 3Uw2 F 3Uw2 3Dw2 B 3Uw2 B' 3Uw2 Dw2 U2 Bw D2 U Bw Uw' Rw Uw Rw Lw2 Fw' Lw2 Uw' Fw2 Uw2 B' Uw L' Dw' U Uw2 Bw2 U L' Bw2 U' Uw2 L' Lw2 F' Uw2 3Lw2 F2 3Lw2 D 3Rw2 B2 3Rw2 F' R2 B' B2 3Lw2 D2 B2 3Rw2 D' R2 D' B2 L2 3Lw2 U' 3Rw U2 3Rw' B2 3Lw B2 D2 U2 3Rw 3Uw 3Dw2 B2 F2 L2 3Uw 3Dw2 B2 3Uw L2 3Dw' 3Bw' U2 3Bw2 U2 R2 U2 R2 3Fw' U2 3Bw' L2 3Fw U2 2Bw U' F' B2 U 2Bw' D L' L2 U2 2Rw2 B D2 B' D2 2Rw2 B' 2Bw' L2 R2 U2 2Bw' R2 U2 2Bw D2 2Fw' 2Lw B2 D2 U2 2Lw' D2 2Lw F2 2Rw' B2 2Rw2 2Dw2 F2 2Dw' F2 2Dw' F2 2Dw' R2 2Uw F2 2Uw' U' R F U' L2 U L2 B L' U2 R' U B2 D2 F2 B2 R2 U2 R2 U B2""".split()
+            solution = """U2 3Uw B' 3Rw' 3Lw D 3Lw' D' 3Lw 3Fw2 D 3Bw' U' Lw' 3Fw2 U 3Rw2 Lw' D B' U' Lw' U Fw' Uw2 Bw 3Rw2 Fw R' 3Uw2 Fw' U Uw2 Bw' Uw2 L2 Rw' 3Dw 3Uw' D' 3Rw2 3Lw2 Fw' Rw' 3Uw2 3Bw2 3Dw' R' F 3Dw2 3Uw B' 3Dw' Uw' Dw F Uw' B 3Uw2 Dw' R Uw' 3Fw2 3Rw2 R' Bw2 F Uw' 3Bw2 3Fw2 B2 L' 3Dw2 3Uw2 B' R Dw' U Lw2 3Fw2 Bw2 Fw2 U' 3Bw2 3Rw2 Dw2 L' 3Uw2 Dw2 L 3Dw2 L' Dw2 R Uw2 L' 3Uw2 Uw2 F' 3Dw2 F' B 3Uw2 F 3Uw2 3Dw2 B 3Uw2 B' 3Uw2 Dw2 U2 Bw D2 U Bw Uw' Rw Uw Rw Lw2 Fw' Lw2 Uw' Fw2 Uw2 B' Uw L' Dw' U Uw2 Bw2 U L' Bw2 U' Uw2 L' Lw2 F' Uw2 3Lw2 F2 3Lw2 D 3Rw2 B2 3Rw2 F' R2 B' B2 3Lw2 D2 B2 3Rw2 D' R2 D' B2 L2 3Lw2 U' 3Rw U2 3Rw' B2 3Lw B2 D2 U2 3Rw 3Uw 3Dw2 B2 F2 L2 3Uw 3Dw2 B2 3Uw L2 3Dw' 3Bw' U2 3Bw2 U2 R2 U2 R2 3Fw' U2 3Bw' L2 3Fw U2 2Bw U' F' B2 U 2Bw' D L' L2 U2 2Rw2 B D2 B' D2 2Rw2 B' 2Bw' L2 R2 U2 2Bw' R2 U2 2Bw D2 2Fw' 2Lw B2 D2 U2 2Lw' D2 2Lw F2 2Rw' B2 2Rw2 2Dw2 F2 2Dw' F2 2Dw' F2 2Dw' R2 2Uw F2 2Uw' U' R F U' L2 U L2 B L' U2 R' U B2 D2 F2 B2 R2 U2 R2 U B2""".split()
             self.rows_and_cols = 7
 
         else:
-            if self.SERVER:
-                cmd = 'ssh robot@%s "cd /home/robot/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s"' % (self.SERVER, self.cube_for_resolver)
-            else:
-                cmd = 'cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s' % ''.join(self.cube_for_resolver)
+            solution = send_command(self.SERVER, 10000, "GET_SOLUTION:%s" % self.cube_for_resolver).strip().split()
 
-            log.info(cmd)
-            output = subprocess.check_output(cmd, shell=True).decode('ascii').strip()
-            actions = []
-
-            for line in output.splitlines():
-                line = line.strip()
-                re_solution = re.search('^Solution:\s+(.*)$', line)
-
-                if re_solution:
-                    actions = re_solution.group(1).strip().split()
-                    break
-
-        self.run_actions(actions)
+        self.run_solution(solution)
         self.elevate(0)
         self.squisher_reset()
 
@@ -1436,7 +1393,7 @@ class CraneCuber3x3x3(object):
     def test_foo(self):
         foo = ("3Uw", )
         #foo = ("U'", )
-        self.run_actions(foo)
+        self.run_solution(foo)
         self.flip_to_init()
         self.elevate(0)
 
@@ -1553,7 +1510,7 @@ class CraneCuber3x3x3(object):
         """
         # tetris = ("L", "R", "F", "B", "U’", "D’", "L’", "R’")
         checkerboard = ("F", "B2", "R’", "D2", "B", "R", "U", "D’", "R", "L’", "D’", "F’", "R2", "D", "F2", "B’")
-        self.run_actions(checkerboard)
+        self.run_solution(checkerboard)
 
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
@@ -1653,7 +1610,6 @@ class MonitorTouchSensor(Thread):
         else:
             self.touch_sensor = TouchSensor()
 
-
     def __str__(self):
         return "MonitorTouchSensor"
 
@@ -1715,17 +1671,12 @@ if __name__ == '__main__':
                     break
 
         if SERVER is None:
-            print("ERROR: The server.conf does not contain a server")
+            print("ERROR: server.conf does not contain a server")
             sys.exit(1)
+    else:
+        SERVER = '0.0.0.0'
 
-    if SERVER:
-        log.info("Verify we can ssh to %s without a password" % SERVER)
-        cmd = 'ssh robot@%s ls /tmp' % SERVER
-        try:
-            subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT).decode('ascii').strip()
-        except Exception as e:
-            print("ERROR: '%s' failed due to %s, cannot ssh to server" % (cmd, e))
-            sys.exit(1)
+    send_command(SERVER, 10000, "PING")
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
@@ -1742,14 +1693,16 @@ if __name__ == '__main__':
     sys.exit(0)
     '''
 
-    # Uncomment to test elevate()
+    # Uncomment to test something
     '''
     cc = CraneCuber4x4x4(SERVER, args.emulate)
     cc.init_motors()
-    cc.elevate(1)
-    log.info("Paused")
-    input("Paused")
+    cc.move_down_to_top(1)
+
+    # reset back to starting position
+    cc.flip()
     cc.elevate(0)
+    cc.shutdown_robot()
     sys.exit(0)
     '''
 
