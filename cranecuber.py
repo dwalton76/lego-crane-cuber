@@ -445,6 +445,7 @@ class CraneCuber3x3x3(object):
             orig_up = self.facing_up
             orig_down = self.facing_down
 
+            # dwalton
             if quarter_turns == 2:
                 self.facing_north = orig_south
                 self.facing_west = orig_east
@@ -465,8 +466,8 @@ class CraneCuber3x3x3(object):
             #log.warning("north %s, west %s, south %s, east %s, up %s, down %s (original), rows_in_turntable %d, rows_in_turntable_to_count_as_face_turn %d" %
             #    (orig_north, orig_west, orig_south, orig_east, orig_up, orig_down, self.rows_in_turntable, self.rows_in_turntable_to_count_as_face_turn))
 
-        #log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
-        #    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
+        log.info("rotate_cube() north %s, west %s, south %s, east %s, up %s, down %s" %
+            (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
     def squish(self):
         # positive closes the squisher
@@ -582,8 +583,14 @@ class CraneCuber3x3x3(object):
         log.info("flipper running wait_until_not_moving")
         self.flipper.wait_until_not_moving(timeout=4000)
         self.flipper_at_init = not self.flipper_at_init
-        current_pos = self.flipper.position
+
+        if self.emulate:
+            current_pos = final_pos
+        else:
+            current_pos = self.flipper.position
+
         log.info("flipper not moving, at_init %s" % self.flipper_at_init)
+
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -592,10 +599,7 @@ class CraneCuber3x3x3(object):
         log.info("flip() %s degrees (%s -> %s, target %s) took %dms" %
             (degrees_moved, init_pos, current_pos, final_pos, delta_ms))
 
-        # This shouldn't happen anymore now that we tilt the flipper a few
-        # degrees when we elevate() the cube up so that it is flush against
-        # the flipper when it comes back down.
-        if not self.emulate and abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
+        if abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
         if final_pos == 0 and current_pos != final_pos:
@@ -613,23 +617,23 @@ class CraneCuber3x3x3(object):
         # cube. If that is the case then then do not alter self.facing_xyz.
         if self.rows_in_turntable == 0:
 
-            # We flipped from the init position to where the flipper is blocking the view of the camera
-            if abs(final_pos - FLIPPER_DEGREES) <= 20:
-                self.facing_north = orig_up
-                self.facing_south = orig_down
-                self.facing_up = orig_south
-                self.facing_down = orig_north
-                #log.info("flipper1 north %s, west %s, south %s, east %s, up %s, down %s" %
-                #    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
-
             # We flipped from where the flipper is blocking the view of the camera to the init position
-            else:
+            if self.flipper_at_init:
                 self.facing_north = orig_down
                 self.facing_south = orig_up
                 self.facing_up = orig_north
                 self.facing_down = orig_south
-                #log.info("flipper2 north %s, west %s, south %s, east %s, up %s, down %s" %
-                #    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
+                log.info("flipper2 north %s, west %s, south %s, east %s, up %s, down %s" %
+                    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
+
+            # We flipped from the init position to where the flipper is blocking the view of the camera
+            else:
+                self.facing_north = orig_up
+                self.facing_south = orig_down
+                self.facing_up = orig_south
+                self.facing_down = orig_north
+                log.info("flipper1 north %s, west %s, south %s, east %s, up %s, down %s" %
+                    (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
     def elevate(self, rows):
         """
@@ -980,6 +984,7 @@ class CraneCuber3x3x3(object):
         self.elevate(0)
 
     def move_north_to_top(self, rows):
+        original_north = self.facing_north
         log.info("move_north_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
 
         # There are four starting points
@@ -1010,8 +1015,14 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(rows)
         self.move_north_to_top_calls += 1
+        assert self.facing_up == original_north, "self.facing_up is %s but should be %s" % (self.facing_up, original_north)
 
     def move_west_to_top(self, rows):
+
+        log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
+                 (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
+
+        original_west = self.facing_west
         log.info("move_west_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
         self.elevate_max()
 
@@ -1029,8 +1040,12 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(rows)
         self.move_west_to_top_calls += 1
+        log.info("north %s, west %s, south %s, east %s, up %s, down %s" %
+                 (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
+        assert self.facing_up == original_west, "self.facing_up is %s but should be %s" % (self.facing_up, original_west)
 
     def move_south_to_top(self, rows):
+        original_south = self.facing_south
         log.info("move_south_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
 
         # There are four starting points
@@ -1061,6 +1076,7 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(rows)
         self.move_south_to_top_calls += 1
+        assert self.facing_up == original_south, "self.facing_up is %s but should be %s" % (self.facing_up, original_south)
 
     def move_east_to_top(self, rows):
         """
@@ -1070,6 +1086,7 @@ class CraneCuber3x3x3(object):
         there is the cube would be pressed up all the way against the side and would
         be more likely to jam up on the elevate(0). I'll stick with what I have :)
         """
+        original_east = self.facing_east
         log.info("move_east_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
         self.elevate_max()
 
@@ -1087,8 +1104,10 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(rows)
         self.move_east_to_top_calls += 1
+        assert self.facing_up == original_east, "self.facing_up is %s but should be %s" % (self.facing_up, original_east)
 
     def move_down_to_top(self, rows):
+        original_down = self.facing_down
         log.info("move_down_to_top() - flipper_at_init %s, rows %d" % (self.flipper_at_init, rows))
         self.elevate(0)
         self.flip()
@@ -1096,6 +1115,7 @@ class CraneCuber3x3x3(object):
         self.flip()
         self.elevate(rows)
         self.move_down_to_top_calls += 1
+        assert self.facing_up == original_down, "self.facing_up is %s but should be %s" % (self.facing_up, original_down)
 
     def get_direction(self, target_face):
         """
