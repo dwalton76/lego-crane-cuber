@@ -227,7 +227,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="takepidc: daemon that takes webcam pics via OpenCV")
     parser.add_argument('-d', '--daemon', help='run as a daemon', action='store_true', default=False)
     parser.add_argument('--video', type=int, default=0, help='The X in /dev/videoX')
-    parser.add_argument('--ip', type=str, default='0.0.0.0')
+    parser.add_argument('--ip', type=str, default='')
     parser.add_argument('--port', type=int, default=10000)
     parser_args = parser.parse_args()
 
@@ -236,6 +236,11 @@ if __name__ == '__main__':
     log = logging.getLogger(__name__)
     logging.addLevelName(logging.ERROR, "\033[91m  %s\033[0m" % logging.getLevelName(logging.ERROR))
     logging.addLevelName(logging.WARNING, "\033[91m%s\033[0m" % logging.getLevelName(logging.WARNING))
+
+    # barf if not running as root...we can't take a pic in that scenario
+    if os.geteuid() != 0:
+        print("cranecuberd.py must be run with root privs")
+        sys.exit(1)
 
     if not os.path.exists(SCRATCHPAD_DIR):
         os.makedirs(SCRATCHPAD_DIR, mode=0755)
