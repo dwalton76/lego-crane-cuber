@@ -197,10 +197,10 @@ class CraneCuber3x3x3(object):
             self.turntable = LargeMotor(OUTPUT_C)
             self.squisher = LargeMotor(OUTPUT_D)
 
-        #self.elevator.total_distance = 0
-        #self.flipper.total_distance = 0
-        #self.turntable.total_distance = 0
-        #self.squisher.total_distance = 0
+        self.elevator.total_distance = 0
+        self.flipper.total_distance = 0
+        self.turntable.total_distance = 0
+        self.squisher.total_distance = 0
 
         self.motors = [self.elevator, self.flipper, self.turntable, self.squisher]
         self.rows_in_turntable = 0
@@ -331,8 +331,8 @@ class CraneCuber3x3x3(object):
         start_pos = self.turntable.position
         delta = abs(final_pos - start_pos)
 
-        #if count_total_distance:
-        #    self.turntable.total_distance += delta
+        if count_total_distance:
+            self.turntable.total_distance += delta
 
         if not delta:
             return
@@ -599,7 +599,10 @@ class CraneCuber3x3x3(object):
         log.info("flip() %s degrees (%s -> %s, target %s) took %dms" %
             (degrees_moved, init_pos, current_pos, final_pos, delta_ms))
 
-        if abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
+        # This shouldn't happen anymore now that we tilt the flipper a few
+        # degrees when we elevate() the cube up so that it is flush against
+        # the flipper when it comes back down.
+        if not self.emulate and abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
         if final_pos == 0 and current_pos != final_pos:
@@ -770,7 +773,7 @@ class CraneCuber3x3x3(object):
 
         start = datetime.datetime.now()
         init_pos = self.elevator.position
-        #self.elevator.total_distance += abs(final_pos - init_pos)
+        self.elevator.total_distance += abs(final_pos - init_pos)
 
         # going down
         if rows < self.rows_in_turntable:
@@ -1350,8 +1353,6 @@ class CraneCuber3x3x3(object):
                     (self.facing_up, self.facing_down, self.facing_north, self.facing_west, self.facing_south, self.facing_east))
             log.info("\n\n\n\n")
             moves += 1
-            #log.info("Paused")
-            #input("Paused")
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -1722,7 +1723,7 @@ if __name__ == '__main__':
     sys.exit(0)
     '''
 
-    # Uncomment to test something
+    # Uncomment to test elevate()
     '''
     cc = CraneCuber4x4x4(SERVER, args.emulate)
     cc.init_motors()
@@ -1793,8 +1794,8 @@ if __name__ == '__main__':
             if cc.shutdown_event.is_set() or args.emulate:
                 break
 
-        #log.info("%s: elevator moved %d degrees total (%d rotations)" % (cc.elevator, cc.elevator.total_distance, int(cc.elevator.total_distance/360)))
-        #log.info("%s: turntable moved %d degrees total (%d quarter turns)" % (cc.turntable, cc.turntable.total_distance, int(cc.turntable.total_distance/TURNTABLE_TURN_DEGREES)))
+        log.info("%s: elevator moved %d degrees total (%d rotations)" % (cc.elevator, cc.elevator.total_distance, int(cc.elevator.total_distance/360)))
+        log.info("%s: turntable moved %d degrees total (%d quarter turns)" % (cc.turntable, cc.turntable.total_distance, int(cc.turntable.total_distance/TURNTABLE_TURN_DEGREES)))
         log.info("%d move_north_to_top_calls" % cc.move_north_to_top_calls)
         log.info("%d move_south_to_top_calls" % cc.move_south_to_top_calls)
         log.info("%d move_east_to_top_calls" % cc.move_east_to_top_calls)
