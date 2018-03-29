@@ -6,6 +6,9 @@ A Rubiks cube solving robot made from EV3 + 42009
 """
 
 from copy import deepcopy
+from ev3dev2 import get_current_platform
+from ev3dev2.port import LegoPort
+from ev3dev2.sensor import INPUT_1
 from ev3dev2.sensor.lego import TouchSensor
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, MediumMotor
 from math import pi, sqrt
@@ -170,7 +173,7 @@ class DummySensor(object):
 
 class CraneCuber3x3x3(object):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=3, size_mm=57):
+    def __init__(self, SERVER, emulate, platform, rows_and_cols=3, size_mm=57):
         self.SERVER = SERVER
         self.shutdown_event = Event()
         self.rows_and_cols = rows_and_cols
@@ -193,14 +196,19 @@ class CraneCuber3x3x3(object):
             self.squisher = DummyMotor(OUTPUT_D)
         else:
             self.elevator = LargeMotor(OUTPUT_A)
-            self.flipper = MediumMotor(OUTPUT_B)
+
+            if platform in ('brickpi', 'brickpi3'):
+                self.flipper = LargeMotor(OUTPUT_B)
+            else:
+                self.flipper = MediumMotor(OUTPUT_B)
+
             self.turntable = LargeMotor(OUTPUT_C)
             self.squisher = LargeMotor(OUTPUT_D)
 
-        self.elevator.total_distance = 0
-        self.flipper.total_distance = 0
-        self.turntable.total_distance = 0
-        self.squisher.total_distance = 0
+        #self.elevator.total_distance = 0
+        #self.flipper.total_distance = 0
+        #self.turntable.total_distance = 0
+        #self.squisher.total_distance = 0
 
         self.motors = [self.elevator, self.flipper, self.turntable, self.squisher]
         self.rows_in_turntable = 0
@@ -331,8 +339,8 @@ class CraneCuber3x3x3(object):
         start_pos = self.turntable.position
         delta = abs(final_pos - start_pos)
 
-        if count_total_distance:
-            self.turntable.total_distance += delta
+        #if count_total_distance:
+        #    self.turntable.total_distance += delta
 
         if not delta:
             return
@@ -445,7 +453,6 @@ class CraneCuber3x3x3(object):
             orig_up = self.facing_up
             orig_down = self.facing_down
 
-            # dwalton
             if quarter_turns == 2:
                 self.facing_north = orig_south
                 self.facing_west = orig_east
@@ -773,7 +780,7 @@ class CraneCuber3x3x3(object):
 
         start = datetime.datetime.now()
         init_pos = self.elevator.position
-        self.elevator.total_distance += abs(final_pos - init_pos)
+        #self.elevator.total_distance += abs(final_pos - init_pos)
 
         # going down
         if rows < self.rows_in_turntable:
@@ -1545,8 +1552,8 @@ class CraneCuber3x3x3(object):
 
 class CraneCuber2x2x2(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=2, size_mm=55):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, platform, rows_and_cols=2, size_mm=55):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, platform, rows_and_cols, size_mm)
 
         # This cube is so light it tends to get knocked around if we raise and lower it too fast
         # positive moves down
@@ -1573,8 +1580,8 @@ class CraneCuber2x2x2(CraneCuber3x3x3):
 
 class CraneCuber4x4x4(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=4, size_mm=62):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, platform, rows_and_cols=4, size_mm=62):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, platform, rows_and_cols, size_mm)
 
         # These are for a 62mm 4x4x4 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 116
@@ -1587,8 +1594,8 @@ class CraneCuber4x4x4(CraneCuber3x3x3):
 
 class CraneCuber5x5x5(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=5, size_mm=63):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, platform, rows_and_cols=5, size_mm=63):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, platform, rows_and_cols, size_mm)
 
         # These are for a 63mm 5x5x5 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 100
@@ -1601,8 +1608,8 @@ class CraneCuber5x5x5(CraneCuber3x3x3):
 
 class CraneCuber6x6x6(CraneCuber3x3x3):
 
-    def __init__(self, SERVER, emulate, rows_and_cols=6, size_mm=67):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+    def __init__(self, SERVER, emulate, platform, rows_and_cols=6, size_mm=67):
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, platform, rows_and_cols, size_mm)
 
         # These are for a 67mm 6x6x6 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 68
@@ -1616,7 +1623,7 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
 class CraneCuber7x7x7(CraneCuber3x3x3):
 
     def __init__(self, SERVER, emulate, rows_and_cols=7, size_mm=69):
-        CraneCuber3x3x3.__init__(self, SERVER, emulate, rows_and_cols, size_mm)
+        CraneCuber3x3x3.__init__(self, SERVER, emulate, platform, rows_and_cols, size_mm)
 
         # These are for a 69mm 7x7x7 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 46
@@ -1638,7 +1645,7 @@ class MonitorTouchSensor(Thread):
         if emulate:
             self.touch_sensor = DummySensor()
         else:
-            self.touch_sensor = TouchSensor()
+            self.touch_sensor = TouchSensor(INPUT_1)
 
     def __str__(self):
         return "MonitorTouchSensor"
@@ -1708,6 +1715,26 @@ if __name__ == '__main__':
 
     send_command(SERVER, 10000, "PING")
 
+    platform = get_current_platform()
+
+    if platform == 'brickpi3':
+
+        # http://docs.ev3dev.org/projects/lego-linux-drivers/en/ev3dev-jessie/sensors.html
+        sensor_port1 = LegoPort(INPUT_1)
+        sensor_port1.mode = 'ev3-analog'
+        sensor_port1.set_device = 'lego-ev3-touch'
+
+        # http://docs.ev3dev.org/projects/lego-linux-drivers/en/ev3dev-jessie/motors.html
+        motor_portA = LegoPort(OUTPUT_A)
+        motor_portB = LegoPort(OUTPUT_B)
+        motor_portC = LegoPort(OUTPUT_C)
+        motor_portD = LegoPort(OUTPUT_D)
+
+        motor_portA.mode = 'tacho-motor'
+        motor_portB.mode = 'tacho-motor'
+        motor_portC.mode = 'tacho-motor'
+        motor_portD.mode = 'tacho-motor'
+
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
     #cc = CraneCuber2x2x2(SERVER, args.emulate)
@@ -1744,7 +1771,7 @@ if __name__ == '__main__':
         while True:
 
             # Use a CraneCuber6x6x6 object for scanning
-            cc = CraneCuber6x6x6(SERVER, args.emulate)
+            cc = CraneCuber6x6x6(SERVER, args.emulate, platform)
             mts.cc = cc
             cc.mts = mts
             cc.init_motors()
@@ -1771,15 +1798,15 @@ if __name__ == '__main__':
             size = int(math.sqrt(squares_per_side))
 
             if size == 2:
-                cc = CraneCuber2x2x2(SERVER, args.emulate)
+                cc = CraneCuber2x2x2(SERVER, args.emulate, platform)
             elif size == 3:
-                cc = CraneCuber3x3x3(SERVER, args.emulate)
+                cc = CraneCuber3x3x3(SERVER, args.emulate, platform)
             elif size == 4:
-                cc = CraneCuber4x4x4(SERVER, args.emulate)
+                cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
             elif size == 5:
-                cc = CraneCuber5x5x5(SERVER, args.emulate)
+                cc = CraneCuber5x5x5(SERVER, args.emulate, platform)
             elif size == 6:
-                cc = CraneCuber6x6x6(SERVER, args.emulate)
+                cc = CraneCuber6x6x6(SERVER, args.emulate, platform)
             elif size == 7:
                 pass
             else:
