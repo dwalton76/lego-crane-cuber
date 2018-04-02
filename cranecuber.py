@@ -1641,16 +1641,18 @@ class MonitorTouchSensor(Thread):
         self.cc = None
         self.shutdown_event = Event()
         self.waiting_for_release = False
-
-        if emulate:
-            self.touch_sensor = DummySensor()
-        else:
-            self.touch_sensor = TouchSensor(INPUT_1)
+        self.emulate = emulate
 
     def __str__(self):
         return "MonitorTouchSensor"
 
     def run(self):
+
+        if self.emulate:
+            self.touch_sensor = DummySensor()
+        else:
+            self.touch_sensor = TouchSensor(INPUT_1)
+
         while True:
 
             if self.shutdown_event.is_set():
