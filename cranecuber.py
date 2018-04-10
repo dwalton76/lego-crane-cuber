@@ -83,7 +83,7 @@ class BrokenSocket(Exception):
     pass
 
 
-def send_command(ip, port, cmd):
+def send_command(ip, port, cmd, timeout=30):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server_address = (ip, port)
 
@@ -97,7 +97,6 @@ def send_command(ip, port, cmd):
     log.info("TXed %s to cranecuberd" % cmd)
 
     sock.setblocking(0)
-    timeout = 30
     total_data = []
 
     while True:
@@ -233,15 +232,15 @@ class CraneCuber3x3x3(object):
         # Slow down for more accuracy
         # positive is clockwise
         # negative is counter clockwise
-        self.TURNTABLE_SPEED_NORMAL = 1050
-        self.TURNTABLE_SPEED_FREE = 1050
+        self.TURNTABLE_SPEED_NORMAL = 1020
+        self.TURNTABLE_SPEED_FREE = 1020
 
         # positive moves down
         # negative moves up
-        self.ELEVATOR_SPEED_UP_FAST = 1050
-        self.ELEVATOR_SPEED_UP_SLOW = 1050
-        self.ELEVATOR_SPEED_DOWN_FAST = 1050
-        self.ELEVATOR_SPEED_DOWN_SLOW = 1050
+        self.ELEVATOR_SPEED_UP_FAST = 1020
+        self.ELEVATOR_SPEED_UP_SLOW = 1020
+        self.ELEVATOR_SPEED_DOWN_FAST = 1020
+        self.ELEVATOR_SPEED_DOWN_SLOW = 1020
 
         # These numbers are for a 57mm 3x3x3 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 214
@@ -310,9 +309,6 @@ class CraneCuber3x3x3(object):
             log.info('shutting down mts complete')
 
         self.elevate(0)
-
-        #if self.flipper.position > 10:
-        #    self.flip()
 
         for x in self.motors:
             x.stop(stop_action='brake')
@@ -562,28 +558,24 @@ class CraneCuber3x3x3(object):
         # the cube to slide a little when the flipper stops.  When the cube
         # slides like this it is no longer lined up with the turntable above so
         # when we raise the cube it jams up.
-        log.info("flipper run_to_abs_pos(), rows_in_turntable %s, flipper_at_init %s, init_pos %s, final_pos %s" % (self.rows_in_turntable, self.flipper_at_init, init_pos, final_pos))
+        log.info("flipper run_to_abs_pos(), rows_in_turntable %s, flipper_at_init %s, init_pos %s, final_pos %s" %
+            (self.rows_in_turntable, self.flipper_at_init, init_pos, final_pos))
 
-        if self.rows_in_turntable == 0:
-
-            if slow:
-                flipper_speed = int(self.FLIPPER_SPEED / 4)
-            else:
+        if slow:
+            flipper_speed = int(self.FLIPPER_SPEED / 4)
+        else:
+            if self.rows_in_turntable == 0:
                 flipper_speed = self.FLIPPER_SPEED
 
-            self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                        speed_sp=flipper_speed,
-                                        ramp_up_sp=0,
-                                        ramp_down_sp=500,
-                                        stop_action='hold')
+            # Cube is raised so we can go fast
+            else:
+                flipper_speed = self.FLIPPER_SPEED * 2
 
-        # Cube is raised so we can go fast
-        else:
-            self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                        speed_sp=self.FLIPPER_SPEED * 2,
-                                        ramp_up_sp=0,
-                                        ramp_down_sp=0,
-                                        stop_action='hold')
+        self.flipper.run_to_abs_pos(position_sp=final_pos,
+                                    speed_sp=flipper_speed,
+                                    ramp_up_sp=0,
+                                    ramp_down_sp=500,
+                                    stop_action='hold')
 
         log.info("flipper wait_until running")
         self.flipper.wait_until('running')
@@ -606,9 +598,6 @@ class CraneCuber3x3x3(object):
         log.info("flip() %s degrees (%s -> %s, target %s) took %dms" %
             (degrees_moved, init_pos, current_pos, final_pos, delta_ms))
 
-        # This shouldn't happen anymore now that we tilt the flipper a few
-        # degrees when we elevate() the cube up so that it is flush against
-        # the flipper when it comes back down.
         if not self.emulate and abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
@@ -755,13 +744,13 @@ class CraneCuber3x3x3(object):
 
             elif self.rows_and_cols == 7:
                 if rows == 1:
-                    final_pos = -132
+                    final_pos = -126
                 elif rows == 2:
                     final_pos = -154
                 elif rows == 3:
                     final_pos = -177
                 elif rows == 4:
-                    final_pos = -193
+                    final_pos = -195
                 elif rows == 5:
                     final_pos = -220
                 elif rows == 6:
@@ -839,7 +828,8 @@ class CraneCuber3x3x3(object):
             delta_target = abs(final_pos - init_pos)
 
             if not self.emulate and delta < (delta_target * 0.90):
-                log.warning("elevate jammed up, only moved %d, should have moved %d...attempting to clear" % (delta, delta_target))
+                log.warning("elevate jammed up, only moved %d, should have moved %d...attempting to clear (init_pos %d, current_pos %d, final_pos %d)" %
+                    (delta, delta_target, init_pos, current_pos, final_pos))
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
                                              stop_action='hold')
@@ -863,7 +853,8 @@ class CraneCuber3x3x3(object):
                 delta_target = abs(final_pos - init_pos)
 
                 if delta < (delta_target * 0.90):
-                    raise CubeJammed("elevate jammed up, only moved %d, should have moved %d" % (delta, delta_target))
+                    raise CubeJammed("elevate jammed up, only moved %d, should have moved %d, init_pos %d, current_pos %d, final_pos %d" %
+                        (delta, delta_target, init_pos, current_pos, final_pos))
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -896,25 +887,25 @@ class CraneCuber3x3x3(object):
 
         log.info("scan()")
         self.colors = {}
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('F')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('R')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('B')
 
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('L')
 
         # expose the 'D' side, then raise the cube so we can get the flipper out
@@ -923,14 +914,14 @@ class CraneCuber3x3x3(object):
         self.elevate_max()
         self.flip()
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('D')
 
         # rotate to scan the 'U' side
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=2)
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
         self.scan_face('U')
 
         # To make troubleshooting easier, move the F of the cube so that it
@@ -940,7 +931,7 @@ class CraneCuber3x3x3(object):
         self.rotate(clockwise=False, quarter_turns=1)
         self.flip()
         self.elevate(0)
-        self.flip_settle_cube()
+        #self.flip_settle_cube()
 
         #log.info("Paused")
         #input("Paused")
@@ -1414,7 +1405,14 @@ class CraneCuber3x3x3(object):
             #self.rows_and_cols = 6
 
         else:
-            solution = send_command(self.SERVER, 10000, "GET_SOLUTION:%s" % self.cube_for_resolver).strip().split()
+            if self.rows_and_cols <= 5:
+                solution_timeout = 30
+
+            # Sometimes it can take 10s of seconds to compute the solution for the centers of a 7x7x7
+            else:
+                solution_timeout = 300
+
+            solution = send_command(self.SERVER, 10000, "GET_SOLUTION:%s" % self.cube_for_resolver, timeout=solution_timeout).strip().split()
 
         self.run_solution(solution)
         self.elevate(0)
@@ -1767,6 +1765,7 @@ if __name__ == '__main__':
 
     cc = None
     mts = MonitorTouchSensor(args.emulate)
+    mts.cc = cc
     mts.start()
 
     try:
@@ -1823,8 +1822,8 @@ if __name__ == '__main__':
             if cc.shutdown_event.is_set() or args.emulate:
                 break
 
-        log.info("%s: elevator moved %d degrees total (%d rotations)" % (cc.elevator, cc.elevator.total_distance, int(cc.elevator.total_distance/360)))
-        log.info("%s: turntable moved %d degrees total (%d quarter turns)" % (cc.turntable, cc.turntable.total_distance, int(cc.turntable.total_distance/TURNTABLE_TURN_DEGREES)))
+        #log.info("%s: elevator moved %d degrees total (%d rotations)" % (cc.elevator, cc.elevator.total_distance, int(cc.elevator.total_distance/360)))
+        #log.info("%s: turntable moved %d degrees total (%d quarter turns)" % (cc.turntable, cc.turntable.total_distance, int(cc.turntable.total_distance/TURNTABLE_TURN_DEGREES)))
         log.info("%d move_north_to_top_calls" % cc.move_north_to_top_calls)
         log.info("%d move_south_to_top_calls" % cc.move_south_to_top_calls)
         log.info("%d move_east_to_top_calls" % cc.move_east_to_top_calls)
