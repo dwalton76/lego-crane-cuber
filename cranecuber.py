@@ -204,11 +204,6 @@ class CraneCuber3x3x3(object):
             self.turntable = LargeMotor(OUTPUT_C)
             self.squisher = LargeMotor(OUTPUT_D)
 
-        self.elevator.desc = "elevator(%s)" % OUTPUT_A
-        self.flipper.desc = "flipper(%s)" % OUTPUT_B
-        self.turntable.desc = "turntable(%s)" % OUTPUT_C
-        self.squisher.desc = "squisher(%s)" % OUTPUT_D
-
         #self.elevator.total_distance = 0
         #self.flipper.total_distance = 0
         #self.turntable.total_distance = 0
@@ -373,9 +368,9 @@ class CraneCuber3x3x3(object):
                                       stop_action='hold',
                                       ramp_up_sp=ramp_up,
                                       ramp_down_sp=ramp_down)
-        self.turntable.wait_until_moving(timeout=2000)
+        self.turntable.wait_until('running', timeout=2000)
         self.squisher.run_to_rel_pos(position_sp=squisher_position, speed_sp=squisher_speed)
-        self.squisher.wait_until_moving(timeout=2000)
+        self.squisher.wait_until('running', timeout=2000)
 
         # Now wait for both to stop
         self.turntable.wait_until_not_moving(timeout=2000)
