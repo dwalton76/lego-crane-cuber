@@ -204,6 +204,11 @@ class CraneCuber3x3x3(object):
             self.turntable = LargeMotor(OUTPUT_C)
             self.squisher = LargeMotor(OUTPUT_D)
 
+        self.elevator.desc = "elevator(%s)" % OUTPUT_A
+        self.flipper.desc = "flipper(%s)" % OUTPUT_B
+        self.turntable.desc = "turntable(%s)" % OUTPUT_C
+        self.squisher.desc = "squisher(%s)" % OUTPUT_D
+
         #self.elevator.total_distance = 0
         #self.flipper.total_distance = 0
         #self.turntable.total_distance = 0
@@ -253,6 +258,7 @@ class CraneCuber3x3x3(object):
 
         # 'brake' stops but doesn't hold the motor in place
         # 'hold' stops and holds the motor in place
+        sleep(1)
 
         # Lower all the way down, then raise a bit, then lower back down.
         # We do this to make sure it is in the same starting spot each time.
@@ -279,7 +285,7 @@ class CraneCuber3x3x3(object):
         log.info("Initialize flipper %s" % self.flipper)
         self.flipper.run_forever(speed_sp=150, stop_action='hold')
         self.flipper.wait_until('running')
-        self.flipper.wait_until('stalled')
+        self.flipper.wait_until_not_moving(timeout=4000)
         self.flipper.stop()
         self.flipper.reset()
         self.flipper.stop(stop_action='hold')
@@ -367,9 +373,9 @@ class CraneCuber3x3x3(object):
                                       stop_action='hold',
                                       ramp_up_sp=ramp_up,
                                       ramp_down_sp=ramp_down)
-        self.turntable.wait_until('running', timeout=2000)
+        self.turntable.wait_until_moving(timeout=2000)
         self.squisher.run_to_rel_pos(position_sp=squisher_position, speed_sp=squisher_speed)
-        self.squisher.wait_until('running', timeout=2000)
+        self.squisher.wait_until_moving(timeout=2000)
 
         # Now wait for both to stop
         self.turntable.wait_until_not_moving(timeout=2000)
@@ -588,8 +594,9 @@ class CraneCuber3x3x3(object):
         else:
             current_pos = self.flipper.position
 
-        log.info("flipper not moving, at_init %s" % self.flipper_at_init)
-
+        log.info("flipper not moving, at_init %s, final_pos %s, position %s" % (self.flipper_at_init, final_pos, self.flipper.position))
+        #log.info("PAUSED")
+        #input("PAUSED")
 
         finish = datetime.datetime.now()
         delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
@@ -602,7 +609,8 @@ class CraneCuber3x3x3(object):
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
         if final_pos == 0 and current_pos != final_pos:
-            self.flipper.reset()
+            #self.flipper.reset()
+            self.flipper.position_sp = 0
             self.flipper.stop(stop_action='hold')
 
         # facing_west and facing_east won't change
@@ -1651,32 +1659,41 @@ class MonitorTouchSensor(Thread):
         else:
             self.touch_sensor = TouchSensor(INPUT_1)
 
-        while True:
+        try:
+            while True:
 
-            if self.shutdown_event.is_set():
-                log.warning('%s: shutdown_event is set' % self)
-                break
+                if self.shutdown_event.is_set():
+                    log.warning('%s: shutdown_event is set' % self)
+                    break
 
-            if self.touch_sensor.is_pressed:
+                if self.touch_sensor.is_pressed:
 
-                if not self.waiting_for_release:
-                    self.waiting_for_release = True
+                    if not self.waiting_for_release:
+                        self.waiting_for_release = True
 
-                    if self.cc:
-                        if self.cc.waiting_for_touch_sensor.is_set():
-                            log.warning('%s: TouchSensor pressed, clearing cc waiting_for_touch_sensor' % self)
-                            self.cc.waiting_for_touch_sensor.clear()
-                        else:
-                            log.warning('%s: TouchSensor pressed, setting cc shutdown_event' % self)
-                            self.cc.mts = None
-                            self.cc.shutdown_robot()
-                            self.shutdown_event.set()
-            else:
-                if self.waiting_for_release:
-                    self.waiting_for_release = False
-                    log.warning('%s: TouchSensor released' % self)
-
+                        if self.cc:
+                            if self.cc.waiting_for_touch_sensor.is_set():
+                                log.warning('%s: TouchSensor pressed, clearing cc waiting_for_touch_sensor' % self)
+                                self.cc.waiting_for_touch_sensor.clear()
+                            else:
+                                log.warning('%s: TouchSensor pressed, setting cc shutdown_event' % self)
+                                self.cc.mts = None
+                                self.cc.shutdown_robot()
+                                self.shutdown_event.set()
+                else:
+                    if self.waiting_for_release:
+                        self.waiting_for_release = False
+                        log.warning('%s: TouchSensor released' % self)
             sleep(0.01)
+
+        except Exception as e:
+            log.exception(e)
+
+            if self.cc:
+                self.cc.mts = None
+                self.cc.shutdown_robot()
+
+            self.shutdown_event.set()
 
 
 if __name__ == '__main__':
