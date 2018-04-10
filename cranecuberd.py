@@ -123,7 +123,6 @@ class CraneCuberDaemon(object):
                         if data.startswith('TAKE_PICTURE'):
                             side_name = data.strip().split(':')[1]
                             png_filename = os.path.join(SCRATCHPAD_DIR, 'rubiks-side-%s.png' % side_name)
-                            camera = cv2.VideoCapture(self.dev_video)
 
                             if side_name == 'F':
 
@@ -131,21 +130,35 @@ class CraneCuberDaemon(object):
                                     if filename.endswith('.png'):
                                         os.unlink(os.path.join(SCRATCHPAD_DIR, filename))
 
+                                # Take a pic but throw it away, we do this so the camera adjusts the current lighting conditions
+                                camera = cv2.VideoCapture(self.dev_video)
+                                camera.read()
+                                del(camera)
+                                camera = None
+
+                                # Now take a pic, keep it and note the brightness, etc
+                                camera = cv2.VideoCapture(self.dev_video)
+                                (retval, img) = camera.read()
+
                                 brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
                                 contrast = camera.get(cv2.CAP_PROP_CONTRAST)
                                 saturation = camera.get(cv2.CAP_PROP_SATURATION)
-                                #hue = camera.get(cv2.CAP_PROP_HUE)
                                 gain = camera.get(cv2.CAP_PROP_GAIN)
-                                #exposure = camera.get(cv2.CAP_PROP_EXPOSURE)
+
                             else:
+                                # Set the brightness, etc to be the same as when we took a pic of side F.
+                                # This makes rubiks-color-resolver's job much easier.
+                                camera = cv2.VideoCapture(self.dev_video)
                                 camera.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
                                 camera.set(cv2.CAP_PROP_CONTRAST, contrast)
                                 camera.set(cv2.CAP_PROP_SATURATION, saturation)
-                                #camera.set(cv2.CAP_PROP_HUE, hue)
                                 camera.set(cv2.CAP_PROP_GAIN, gain)
-                                #camera.set(cv2.CAP_PROP_EXPOSURE, exposure)
+                                (retval, img) = camera.read()
 
-                            (retval, img) = camera.read()
+                            # If you do not delete the VideoCapture object opencv2 will sometimes return the
+                            # exact same image when you call read() back-to-back.  This is really bad when
+                            # you have flipped the cube to a new side and end up with a pic of the previous
+                            # side.
                             del(camera)
                             camera = None
 
