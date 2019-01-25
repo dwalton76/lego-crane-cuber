@@ -13,7 +13,7 @@ steps in 'Server Installation'
 ```
 $ sudo adduser robot
 $ su robot
-$ sudo apt-get install python-pip
+$ sudo apt-get install python-pip python-daemon
 ```
 
 ### Installing rubiks-cube-tracker

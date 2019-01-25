@@ -257,33 +257,33 @@ class CraneCuber3x3x3(object):
 
         # Lower all the way down, then raise a bit, then lower back down.
         # We do this to make sure it is in the same starting spot each time.
+        '''
         log.info("Initialize elevator %s - lower all the way down" % self.elevator)
-        self.elevator.run_forever(speed_sp=30, stop_action='brake')
+        self.elevator.run_forever(speed_sp=10, stop_action='brake')
         self.elevator.wait_until('running')
         self.elevator.wait_until_not_moving(timeout=10000)
         self.elevator.stop()
         self.elevator.reset()
+        '''
 
         log.info("Initialize elevator %s - raise a bit" % self.elevator)
+        self.elevator.reset()
+        self.elevator.stop(stop_action='coast')
         self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
         self.elevator.wait_until('running')
-        self.elevator.wait_until_not_moving()
+        self.elevator.wait_until_not_moving(timeout=4000)
 
         log.info("Initialize elevator %s - lower back down" % self.elevator)
-        self.elevator.run_forever(speed_sp=20, stop_action='hold')
+        self.elevator.run_forever(speed_sp=20)
         self.elevator.wait_until('running')
-        self.elevator.wait_until_not_moving(timeout=4000)
-        self.elevator.stop()
-        self.elevator.reset()
-        self.elevator.stop(stop_action='brake')
+        self.elevator.wait_until_not_moving(timeout=10000)
+        self.elevator.position = 0
 
         log.info("Initialize flipper %s" % self.flipper)
         self.flipper.run_forever(speed_sp=150, stop_action='hold')
         self.flipper.wait_until('running')
         self.flipper.wait_until_not_moving(timeout=4000)
-        self.flipper.stop()
-        self.flipper.reset()
-        self.flipper.stop(stop_action='hold')
+        self.flipper.position = 0
         self.flipper_at_init = True
 
         log.info("Initialize turntable %s" % self.turntable)
@@ -490,7 +490,7 @@ class CraneCuber3x3x3(object):
         self.turntable.stop(stop_action='brake')
 
     def squisher_reset(self):
-        self.squisher.run_forever(speed_sp=-40, stop_action='coast')
+        self.squisher.run_forever(speed_sp=-5, stop_action='coast')
         self.squisher.wait_until('running')
         self.squisher.wait_until_not_moving(timeout=4000)
         self.squisher.reset()
@@ -831,10 +831,10 @@ class CraneCuber3x3x3(object):
             delta_target = abs(final_pos - init_pos)
 
             if not self.emulate and delta < (delta_target * 0.90):
-                log.warning("elevate jammed up, only moved %d, should have moved %d...attempting to clear (init_pos %d, current_pos %d, final_pos %d)" %
-                    (delta, delta_target, init_pos, current_pos, final_pos))
+                log.warning("elevate jammed up, only moved %d, should have moved %d, state %s...attempting to clear (init_pos %d, current_pos %d, final_pos %d)" %
+                    (delta, delta_target, self.elevator.state, init_pos, current_pos, final_pos))
                 self.elevator.run_to_abs_pos(position_sp=0,
-                                             speed_sp=self.ELEVATOR_SPEED_UP_SLOW,
+                                             speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
                                              stop_action='hold')
                 self.elevator.wait_until('running')
                 self.elevator.wait_until_not_moving(timeout=3000)
@@ -1649,12 +1649,12 @@ class MonitorTouchSensor(Thread):
 
     def run(self):
 
-        if self.emulate:
-            self.touch_sensor = DummySensor()
-        else:
-            self.touch_sensor = TouchSensor(INPUT_1)
-
         try:
+            if self.emulate:
+                self.touch_sensor = DummySensor()
+            else:
+                self.touch_sensor = TouchSensor(INPUT_1)
+
             while True:
 
                 if self.shutdown_event.is_set():
@@ -1694,8 +1694,9 @@ class MonitorTouchSensor(Thread):
 if __name__ == '__main__':
 
     #logging.basicConfig(filename='/tmp/cranecuber.log',
-    #                    level=logging.INFO,
-    logging.basicConfig(level=logging.INFO,
+    #                    level=logging.DEBUG,
+    #                    format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
+    logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
     log = logging.getLogger(__name__)
 
@@ -1736,25 +1737,15 @@ if __name__ == '__main__':
         sensor_port1.mode = 'ev3-analog'
         sensor_port1.set_device = 'lego-ev3-touch'
 
-        # http://docs.ev3dev.org/projects/lego-linux-drivers/en/ev3dev-jessie/motors.html
-        motor_portA = LegoPort(OUTPUT_A)
-        motor_portB = LegoPort(OUTPUT_B)
-        motor_portC = LegoPort(OUTPUT_C)
-        motor_portD = LegoPort(OUTPUT_D)
-
-        motor_portA.mode = 'tacho-motor'
-        motor_portB.mode = 'tacho-motor'
-        motor_portC.mode = 'tacho-motor'
-        motor_portD.mode = 'tacho-motor'
 
     # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
     '''
-    #cc = CraneCuber2x2x2(SERVER, args.emulate)
-    #cc = CraneCuber3x3x3(SERVER, args.emulate)
-    #cc = CraneCuber4x4x4(SERVER, args.emulate)
-    #cc = CraneCuber5x5x5(SERVER, args.emulate)
-    cc = CraneCuber6x6x6(SERVER, args.emulate)
-    #cc = CraneCuber7x7x7(SERVER, args.emulate)
+    #cc = CraneCuber2x2x2(SERVER, args.emulate, platform)
+    #cc = CraneCuber3x3x3(SERVER, args.emulate, platform)
+    #cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
+    #cc = CraneCuber5x5x5(SERVER, args.emulate, platform)
+    cc = CraneCuber6x6x6(SERVER, args.emulate, platform)
+    #cc = CraneCuber7x7x7(SERVER, args.emulate, platform)
     #cc.init_motors()
     #cc.test_foo()
     cc.squish()
@@ -1764,16 +1755,23 @@ if __name__ == '__main__':
 
     # Uncomment to test elevate()
     '''
-    cc = CraneCuber4x4x4(SERVER, args.emulate)
+    cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
     cc.init_motors()
-    cc.move_down_to_top(1)
+    #cc.move_down_to_top(1)
+    cc.elevate_max()
+    log.info("PAUSED")
+    input("PAUSED")
 
     # reset back to starting position
-    cc.flip()
+    cc.flip_to_init()
     cc.elevate(0)
     cc.shutdown_robot()
     sys.exit(0)
     '''
+
+    # Verify the TouchSensor is connected
+    if not args.emulate:
+        touch_sensor = TouchSensor(INPUT_1)
 
     cc = None
     mts = MonitorTouchSensor(args.emulate)
