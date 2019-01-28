@@ -213,7 +213,7 @@ class CraneCuberDaemon(object):
                         # TX our response and close the socket
                         connection.send(response)
                         connection.close()
-                        log.info("TXed %s response %s" % (data, response))
+                        log.info("TXed %s response\n%s\n\n" % (data, response))
 
                         # We have the entire msg so break out of the inside 'while True' loop
                         break
