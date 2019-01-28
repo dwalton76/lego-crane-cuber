@@ -118,7 +118,7 @@ def send_command(ip, port, cmd, timeout=30):
             raise BrokenSocket("did not receive a response within %s seconds" % timeout)
 
     total_data = ''.join(total_data)
-    log.info("RXed %s response" % total_data)
+    log.info("RXed '%s' response" % total_data)
     sock.close()
     del(sock)
 
@@ -227,7 +227,7 @@ class CraneCuber3x3x3(object):
 
         # positive moves to init position
         # negative moves towards camera
-        self.FLIPPER_SPEED = 300
+        self.FLIPPER_SPEED = 400
 
         # Slow down for more accuracy
         # positive is clockwise
@@ -260,7 +260,7 @@ class CraneCuber3x3x3(object):
         '''
         log.info("Initialize elevator %s - lower all the way down" % self.elevator)
         self.elevator.run_forever(speed_sp=10, stop_action='brake')
-        self.elevator.wait_until('running')
+        self.elevator.wait_until_moving()
         self.elevator.wait_until_not_moving(timeout=10000)
         self.elevator.stop()
         self.elevator.reset()
@@ -270,19 +270,19 @@ class CraneCuber3x3x3(object):
         self.elevator.reset()
         self.elevator.stop(stop_action='coast')
         self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
-        self.elevator.wait_until('running')
+        self.elevator.wait_until_moving(timeout=4000)
         self.elevator.wait_until_not_moving(timeout=4000)
 
         log.info("Initialize elevator %s - lower back down" % self.elevator)
         self.elevator.run_forever(speed_sp=20)
-        self.elevator.wait_until('running')
-        self.elevator.wait_until_not_moving(timeout=10000)
+        if self.elevator.wait_until_moving(timeout=3000):
+            self.elevator.wait_until_not_moving(timeout=15000)
         self.elevator.position = 0
 
         log.info("Initialize flipper %s" % self.flipper)
         self.flipper.run_forever(speed_sp=150, stop_action='hold')
-        self.flipper.wait_until('running')
-        self.flipper.wait_until_not_moving(timeout=4000)
+        if self.flipper.wait_until_moving(timeout=4000):
+            self.flipper.wait_until_not_moving(timeout=4000)
         self.flipper.position = 0
         self.flipper_at_init = True
 
@@ -297,10 +297,14 @@ class CraneCuber3x3x3(object):
     def shutdown_robot(self):
 
         if self.shutdown_event.is_set():
+            log.info('shutdown already in progress')
             return
 
         self.shutdown_event.set()
         log.info('shutting down')
+
+        for x in self.motors:
+            x.stop(stop_action='coast')
 
         if self.mts:
             log.info('shutting down mts')
@@ -309,10 +313,7 @@ class CraneCuber3x3x3(object):
             self.mts = None
             log.info('shutting down mts complete')
 
-        self.elevate(0)
-
-        for x in self.motors:
-            x.stop(stop_action='brake')
+        log.info('shutdown complete')
 
     def signal_term_handler(self, signal, frame):
         log.error('Caught SIGTERM')
@@ -322,7 +323,7 @@ class CraneCuber3x3x3(object):
         log.error('Caught SIGINT')
         self.shutdown_robot()
 
-    def _rotate(self, final_pos, must_be_accurate, count_total_distance):
+    def _rotate(self, final_turntable_pos, must_be_accurate, count_total_distance):
 
         if must_be_accurate:
             speed = self.TURNTABLE_SPEED_NORMAL
@@ -334,7 +335,7 @@ class CraneCuber3x3x3(object):
             ramp_down = 0
 
         start_pos = self.turntable.position
-        delta = abs(final_pos - start_pos)
+        delta = abs(final_turntable_pos - start_pos)
 
         #if count_total_distance:
         #    self.turntable.total_distance += delta
@@ -349,37 +350,53 @@ class CraneCuber3x3x3(object):
         # The gear ratio for the turntable is 1:4.666
         # positive closes the squisher
         # negative opens the squisher
-        if final_pos > start_pos:
+        if final_turntable_pos > start_pos:
             # In this direction the squisher wants to open/unsquish so we must
             # close it to keep it in the same position
-            squisher_position = (delta / 4.666) / 1.8
+            squisher_position_offset = int((delta / 4.666) / 1.8)
         else:
             # In this direction the squisher wants to close/squish so we must
             # open it to keep it in the same position
-            squisher_position = (delta / 4.666) / -1.8
+            squisher_position_offset = int((delta / 4.666) / -1.8)
 
         time_to_rotate = float(delta/speed)
-        squisher_speed = abs(int(squisher_position / time_to_rotate))
+        squisher_speed = abs(int(squisher_position_offset / time_to_rotate))
 
         # We must rotate the squisher in the opposite direction so that it
-        # remains in the same place while the turntable is rotating
-        self.turntable.run_to_abs_pos(position_sp=final_pos,
-                                      speed_sp=speed,
-                                      stop_action='hold',
-                                      ramp_up_sp=ramp_up,
-                                      ramp_down_sp=ramp_down)
-        self.turntable.wait_until('running', timeout=2000)
-        self.squisher.run_to_rel_pos(position_sp=squisher_position, speed_sp=squisher_speed)
-        self.squisher.wait_until('running', timeout=2000)
+        # remains in the same place while the turntable is rotating.
+        # Set all of the attributes for both so we can start them at as close
+        # to the same time as possible.
+        self.turntable.position_sp = final_turntable_pos
+        self.turntable.speed_sp = speed
+        self.turntable.stop_action = 'hold'
+        self.turntable.ramp_up_sp = ramp_up
+        self.turntable.ramp_down_sp = ramp_down
+
+        final_squisher_position = self.squisher.position + squisher_position_offset
+        self.squisher.position_sp = final_squisher_position
+        self.squisher.speed_sp = squisher_speed
+
+        self.turntable.run_to_abs_pos()
+        self.squisher.run_to_abs_pos()
+
+        #log.info("waiting for turntable to move...")
+        self.turntable.wait_until_moving(timeout=2000)
+
+        #log.info("waiting for squisher to move...")
+        self.squisher.wait_until_moving(timeout=2000)
 
         # Now wait for both to stop
+        #log.info("waiting for turntable to stop at %s..." % final_turntable_pos)
         self.turntable.wait_until_not_moving(timeout=2000)
-        self.squisher.wait_until_not_moving(timeout=2000)
+        #self.turntable.wait_until_position(final_turntable_pos)
 
-        #log.info("delta %s, speed %s, time_to_rotate_ %s, squisher_position %s, squisher_speed %s" % (delta, speed, time_to_rotate, squisher_position, squisher_speed))
-        log.info("end _rotate() to %s, speed %d, must_be_accurate %s, %s is %s went %s->%s, squisher %s" %\
-            (final_pos, speed, must_be_accurate,
-             self.turntable, self.turntable.state, start_pos, self.turntable.position, self.squisher.position))
+        #log.info("waiting for squisher to stop at %s..." % final_squisher_position)
+        self.squisher.wait_until_not_moving(timeout=2000)
+        #self.squisher.wait_until_position(final_squisher_position)
+
+        #log.info("end _rotate() to %s, speed %d, must_be_accurate %s, %s is %s went %s->%s, squisher %s" %\
+        #    (final_turntable_pos, speed, must_be_accurate,
+        #     self.turntable, self.turntable.state, start_pos, self.turntable.position, self.squisher.position))
 
     def rotate(self, clockwise, quarter_turns, count_total_distance=False):
 
@@ -470,7 +487,7 @@ class CraneCuber3x3x3(object):
             #log.warning("north %s, west %s, south %s, east %s, up %s, down %s (original), rows_in_turntable %d, rows_in_turntable_to_count_as_face_turn %d" %
             #    (orig_north, orig_west, orig_south, orig_east, orig_up, orig_down, self.rows_in_turntable, self.rows_in_turntable_to_count_as_face_turn))
 
-        log.info("rotate_cube() north %s, west %s, south %s, east %s, up %s, down %s" %
+        log.info("rotate_cube() north %s, west %s, south %s, east %s, up %s, down %s\n\n" %
             (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
     def squish(self):
@@ -478,21 +495,21 @@ class CraneCuber3x3x3(object):
         self.turntable.stop(stop_action='hold')
         self.squisher.reset()
         self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES, speed_sp=400, stop_action='brake')
-        self.squisher.wait_until('running')
+        self.squisher.wait_until_moving()
         self.squisher.wait_until_not_moving(timeout=5000)
         self.squisher.stop()
 
         # negative opens the squisher
         self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES * -1, speed_sp=400, stop_action='coast')
-        self.squisher.wait_until('running')
+        self.squisher.wait_until_moving()
         self.squisher.wait_until_not_moving(timeout=2000)
         self.squisher.stop()
         self.turntable.stop(stop_action='brake')
 
     def squisher_reset(self):
-        self.squisher.run_forever(speed_sp=-5, stop_action='coast')
-        self.squisher.wait_until('running')
-        self.squisher.wait_until_not_moving(timeout=4000)
+        self.squisher.run_forever(speed_sp=-40, stop_action='coast')
+        self.squisher.wait_until_moving()
+        self.squisher.wait_until_not_moving(timeout=10000)
         self.squisher.reset()
 
     def flip_settle_cube(self):
@@ -512,7 +529,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=0,
                                     stop_action='hold')
-        self.flipper.wait_until('running')
+        self.flipper.wait_until_moving()
         self.flipper.wait_until_not_moving(timeout=2000)
 
         if self.shutdown_event.is_set():
@@ -524,7 +541,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=500,
                                     stop_action='hold')
-        self.flipper.wait_until('running')
+        self.flipper.wait_until_moving()
         self.flipper.wait_until_not_moving(timeout=2000)
 
     def flip_to_init(self):
@@ -563,50 +580,68 @@ class CraneCuber3x3x3(object):
             (self.rows_in_turntable, self.flipper_at_init, init_pos, final_pos))
 
         if slow:
-            flipper_speed = int(self.FLIPPER_SPEED / 4)
+            flipper_speed = int(self.FLIPPER_SPEED / 2)
+            ramp_up_speed = 0
+            ramp_down_speed = 0
         else:
             if self.rows_in_turntable == 0:
                 flipper_speed = self.FLIPPER_SPEED
+                ramp_up_speed = 0
+                ramp_down_speed = 500
 
             # Cube is raised so we can go fast
             else:
-                flipper_speed = self.FLIPPER_SPEED * 2
+                flipper_speed = 1020
+                ramp_up_speed = 0
+                ramp_down_speed = 0
 
-        self.flipper.run_to_abs_pos(position_sp=final_pos,
-                                    speed_sp=flipper_speed,
-                                    ramp_up_sp=0,
-                                    ramp_down_sp=500,
-                                    stop_action='hold')
+        self.flipper.position_sp = final_pos
+        self.flipper.speed_sp = flipper_speed
+        self.flipper.ramp_up_sp = ramp_up_speed
+        self.flipper.ramp_down_sp = ramp_down_speed
+        self.flipper.stop_action = 'hold'
 
-        log.info("flipper wait_until running")
-        self.flipper.wait_until('running')
-        log.info("flipper running wait_until_not_moving")
-        self.flipper.wait_until_not_moving(timeout=4000)
-        self.flipper_at_init = not self.flipper_at_init
+        for attempt in range(3):
+            self.flipper.run_to_abs_pos()
 
-        if self.emulate:
-            current_pos = final_pos
+            #log.info("flipper wait_until_moving...")
+            self.flipper.wait_until_moving(timeout=1000)
+
+            #log.info("flipper wait_until_not_moving...")
+            self.flipper.wait_until_not_moving(timeout=4000)
+
+            if self.emulate:
+                current_pos = final_pos
+            else:
+                current_pos = self.flipper.position
+
+            # log.info("flipper not moving, at_init %s, final_pos %s, position %s" % (self.flipper_at_init, final_pos, self.flipper.position))
+
+            finish = datetime.datetime.now()
+            delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
+            self.time_flip += delta_ms
+            degrees_moved = abs(current_pos - init_pos)
+            log.info("flip() %s degrees (%s -> %s, target %s) took %dms" %
+                (degrees_moved, init_pos, current_pos, final_pos, delta_ms))
+
+            if self.emulate:
+                self.flipper_at_init = not self.flipper_at_init
+                break
+            else:
+                # We flipped without issue
+                if abs(degrees_moved) > abs(int(FLIPPER_DEGREES/2)):
+                    self.flipper_at_init = not self.flipper_at_init
+                    break
+
+                # If we did not move at least halfway we know the flip jammed up so try again
+                else:
+                    self.flipper.stop()
+                    log.warning("flip jammed...trying again")
         else:
-            current_pos = self.flipper.position
-
-        log.info("flipper not moving, at_init %s, final_pos %s, position %s" % (self.flipper_at_init, final_pos, self.flipper.position))
-        #log.info("PAUSED")
-        #input("PAUSED")
-
-        finish = datetime.datetime.now()
-        delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
-        self.time_flip += delta_ms
-        degrees_moved = abs(current_pos - init_pos)
-        log.info("flip() %s degrees (%s -> %s, target %s) took %dms" %
-            (degrees_moved, init_pos, current_pos, final_pos, delta_ms))
-
-        if not self.emulate and abs(degrees_moved) < abs(int(FLIPPER_DEGREES/2)):
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
         if final_pos == 0 and current_pos != final_pos:
-            #self.flipper.reset()
             self.flipper.position_sp = 0
-            self.flipper.stop(stop_action='hold')
 
         # facing_west and facing_east won't change
         orig_north = self.facing_north
@@ -794,11 +829,11 @@ class CraneCuber3x3x3(object):
                                              ramp_up_sp=500,
                                              ramp_down_sp=400,
                                              stop_action='hold')
-            log.info("elevate down: wait_until running")
-            self.elevator.wait_until('running')
-            log.info("elevate down: running, wait_until_not_moving")
+            #log.info("elevate down: wait_until running")
+            self.elevator.wait_until_moving(timeout=3000)
+            #log.info("elevate down: running, wait_until_not_moving")
             self.elevator.wait_until_not_moving(timeout=3000)
-            log.info("elevate down: not_moving")
+            #log.info("elevate down: not_moving")
 
         # going up
         else:
@@ -819,11 +854,11 @@ class CraneCuber3x3x3(object):
                                              ramp_down_sp=50, # ramp_down so we stop at the right spot
                                              stop_action='hold')
 
-            log.info("elevate up: wait_until running")
-            self.elevator.wait_until('running')
-            log.info("elevate up: running, wait_until_not_moving")
+            #log.info("elevate up: wait_until running")
+            self.elevator.wait_until_moving(timeout=3000)
+            #log.info("elevate up: running, wait_until_not_moving")
             self.elevator.wait_until_not_moving(timeout=3000)
-            log.info("elevate up: not_moving")
+            #log.info("elevate up: not_moving")
 
             # Did we jam up?
             current_pos = self.elevator.position
@@ -836,7 +871,7 @@ class CraneCuber3x3x3(object):
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
                                              stop_action='hold')
-                self.elevator.wait_until('running')
+                self.elevator.wait_until_moving(timeout=3000)
                 self.elevator.wait_until_not_moving(timeout=3000)
 
                 self.squisher_reset()
@@ -848,7 +883,7 @@ class CraneCuber3x3x3(object):
                                              ramp_up_sp=200, # ramp_up here so we don't slam into the cube at full speed
                                              ramp_down_sp=50, # ramp_down so we stop at the right spot
                                              stop_action='hold')
-                self.elevator.wait_until('running')
+                self.elevator.wait_until_moving(timeout=3000)
                 self.elevator.wait_until_not_moving(timeout=3000)
 
                 current_pos = self.elevator.position
@@ -1415,7 +1450,13 @@ class CraneCuber3x3x3(object):
             else:
                 solution_timeout = 300
 
-            solution = send_command(self.SERVER, 10000, "GET_SOLUTION:%s" % self.cube_for_resolver, timeout=solution_timeout).strip().split()
+            output = send_command(self.SERVER, 10000, "GET_SOLUTION:%s" % self.cube_for_resolver, timeout=solution_timeout).splitlines()
+            for line in output:
+                if line.startswith("Solution:"):
+                    solution = line.split(":")[1].strip().split()
+                    break
+            else:
+                raise Exception("Could not find solution in output\n%s" % "\n".join(output))
 
         self.run_solution(solution)
         self.elevate(0)
@@ -1427,13 +1468,6 @@ class CraneCuber3x3x3(object):
         # Rotate back to 0
         square_pos = round_to_quarter_turn(self.turntable.position)
         self._rotate(square_pos, True, False)
-
-    def test_foo(self):
-        foo = ("3Uw", )
-        #foo = ("U'", )
-        self.run_solution(foo)
-        self.flip_to_init()
-        self.elevate(0)
 
     def test_basics(self):
         """
@@ -1679,15 +1713,11 @@ class MonitorTouchSensor(Thread):
                     if self.waiting_for_release:
                         self.waiting_for_release = False
                         log.warning('%s: TouchSensor released' % self)
-            sleep(0.01)
+                #log.warning("MTS sleep 10ms")
+                sleep(0.1)
 
         except Exception as e:
             log.exception(e)
-
-            if self.cc:
-                self.cc.mts = None
-                self.cc.shutdown_robot()
-
             self.shutdown_event.set()
 
 
@@ -1738,29 +1768,24 @@ if __name__ == '__main__':
         sensor_port1.set_device = 'lego-ev3-touch'
 
 
-    # Use this to test your TURN_BLOCKED_TOUCH_DEGREES
-    '''
-    #cc = CraneCuber2x2x2(SERVER, args.emulate, platform)
-    #cc = CraneCuber3x3x3(SERVER, args.emulate, platform)
-    #cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
-    #cc = CraneCuber5x5x5(SERVER, args.emulate, platform)
-    cc = CraneCuber6x6x6(SERVER, args.emulate, platform)
-    #cc = CraneCuber7x7x7(SERVER, args.emulate, platform)
-    #cc.init_motors()
-    #cc.test_foo()
-    cc.squish()
-    cc.shutdown_robot()
-    sys.exit(0)
-    '''
-
-    # Uncomment to test elevate()
+    # Uncomment to test elevate(), flip(), etc
     '''
     cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
     cc.init_motors()
-    #cc.move_down_to_top(1)
-    cc.elevate_max()
-    log.info("PAUSED")
-    input("PAUSED")
+
+    # dwalton
+    while True:
+        if cc.shutdown_event.is_set():
+            break
+
+        log.info("\n\n\n\n\n\n")
+        #cc.flip()
+        cc.elevate_max()
+        cc.rotate(clockwise=True, quarter_turns=1)
+        cc.elevate(0)
+
+        log.info("PAUSED")
+        input("PAUSED")
 
     # reset back to starting position
     cc.flip_to_init()
@@ -1794,11 +1819,11 @@ if __name__ == '__main__':
             while not cc.shutdown_event.is_set() and cc.waiting_for_touch_sensor.is_set():
                 sleep (0.1)
 
-            if cc.shutdown_event.is_set():
-                break
-
             cc.scan()
             cc.get_colors()
+
+            if cc.shutdown_event.is_set():
+                break
 
             # We have scanned all sides and know how many squares there are, use
             # this to create an object of the appropriate class
