@@ -925,51 +925,53 @@ class CraneCuber3x3x3(object):
 
         log.info("scan()")
         self.colors = {}
-        #self.flip_settle_cube()
         self.scan_face('F')
 
+        log.warning("expose side-R")
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        #self.flip_settle_cube()
         self.scan_face('R')
 
+        log.warning("expose side-B")
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        #self.flip_settle_cube()
         self.scan_face('B')
 
+        log.warning("expose side-L")
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
-        #self.flip_settle_cube()
         self.scan_face('L')
 
-        # expose the 'D' side, then raise the cube so we can get the flipper out
-        # of the way, get the flipper out of the way, then lower the cube
-        self.flip()
+        log.warning("expose side-U")
         self.elevate_max()
+        self.rotate(clockwise=True, quarter_turns=1)
         self.flip()
         self.elevate(0)
-        #self.flip_settle_cube()
-        self.scan_face('D')
-
-        # rotate to scan the 'U' side
-        self.elevate_max()
-        self.rotate(clockwise=True, quarter_turns=2)
-        self.elevate(0)
-        #self.flip_settle_cube()
+        self.flip()
         self.scan_face('U')
+
+        log.warning("expose side-D")
+        self.flip()
+        self.elevate(1)
+        self.flip()
+        self.elevate(0)
+        self.flip()
+        self.elevate(1)
+        self.flip()
+        self.elevate(0)
+        self.scan_face('D')
 
         # To make troubleshooting easier, move the F of the cube so that it
         # is facing the camera like it was when we started the scan
-        self.flip()
-        self.elevate_max()
-        self.rotate(clockwise=False, quarter_turns=1)
+        log.info("\n")
+        log.warning("expose side-F (back to where we started)")
+        self.elevate(1)
         self.flip()
         self.elevate(0)
-        #self.flip_settle_cube()
+        self.flip()
 
         #log.info("Paused")
         #input("Paused")
@@ -1444,7 +1446,7 @@ class CraneCuber3x3x3(object):
 
         else:
             if self.rows_and_cols <= 5:
-                solution_timeout = 30
+                solution_timeout = 90
 
             # Sometimes it can take 10s of seconds to compute the solution for the centers of a 7x7x7
             else:
