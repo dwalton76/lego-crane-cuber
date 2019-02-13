@@ -7,6 +7,7 @@ A Rubiks cube solving robot made from EV3 + 42009
 
 from copy import deepcopy
 from ev3dev2 import get_current_platform
+from ev3dev2.led import Leds
 from ev3dev2.port import LegoPort
 from ev3dev2.sensor import INPUT_1
 from ev3dev2.sensor.lego import TouchSensor
@@ -14,7 +15,6 @@ from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, Me
 from math import pi, sqrt
 from pprint import pformat
 from select import select
-from time import sleep
 from threading import Thread, Event
 from time import sleep
 import argparse
@@ -187,6 +187,7 @@ class CraneCuber3x3x3(object):
         self.move_east_to_top_calls = 0
         self.move_west_to_top_calls = 0
         self.move_down_to_top_calls = 0
+        self.leds = Leds()
 
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
@@ -251,6 +252,9 @@ class CraneCuber3x3x3(object):
 
     def init_motors(self):
 
+        self.leds.set_color('LEFT', 'ORANGE')
+        self.leds.set_color('RIGHT', 'ORANGE')
+
         # 'brake' stops but doesn't hold the motor in place
         # 'hold' stops and holds the motor in place
         sleep(1)
@@ -294,16 +298,22 @@ class CraneCuber3x3x3(object):
         self.squisher_reset()
         self.squisher.stop(stop_action='brake')
 
+        self.leds.set_color('LEFT', 'GREEN')
+        self.leds.set_color('RIGHT', 'GREEN')
+
     def shutdown_robot(self):
 
         if self.shutdown_event.is_set():
             log.info('shutdown already in progress')
             return
 
+        self.leds.set_color('LEFT', 'RED')
+        self.leds.set_color('RIGHT', 'RED')
         self.shutdown_event.set()
         log.info('shutting down')
 
         for x in self.motors:
+            x.reset()
             x.stop(stop_action='coast')
 
         if self.mts:
@@ -636,7 +646,10 @@ class CraneCuber3x3x3(object):
                 # If we did not move at least halfway we know the flip jammed up so try again
                 else:
                     self.flipper.stop()
+                    self.flipper.reset()
+                    self.flipper.position = current_pos
                     log.warning("flip jammed...trying again")
+                    sleep(1)
         else:
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
@@ -866,8 +879,13 @@ class CraneCuber3x3x3(object):
             delta_target = abs(final_pos - init_pos)
 
             if not self.emulate and delta < (delta_target * 0.90):
+                current_pos = self.elevator.position
                 log.warning("elevate jammed up, only moved %d, should have moved %d, state %s...attempting to clear (init_pos %d, current_pos %d, final_pos %d)" %
                     (delta, delta_target, self.elevator.state, init_pos, current_pos, final_pos))
+                self.elevator.reset()
+                self.elevator.position = current_pos
+                sleep(1)
+
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
                                              stop_action='hold')
@@ -1821,6 +1839,8 @@ if __name__ == '__main__':
             while not cc.shutdown_event.is_set() and cc.waiting_for_touch_sensor.is_set():
                 sleep (0.1)
 
+            cc.leds.set_color('LEFT', 'ORANGE')
+            cc.leds.set_color('RIGHT', 'ORANGE')
             cc.scan()
             cc.get_colors()
 
@@ -1856,6 +1876,8 @@ if __name__ == '__main__':
             cc.resolve_colors()
             cc.resolve_actions()
 
+            cc.leds.set_color('LEFT', 'GREEN')
+            cc.leds.set_color('RIGHT', 'GREEN')
             if cc.shutdown_event.is_set() or args.emulate:
                 break
 
@@ -1872,6 +1894,8 @@ if __name__ == '__main__':
 
     except Exception as e:
         log.exception(e)
+        cc.leds.set_color('LEFT', 'RED')
+        cc.leds.set_color('RIGHT', 'RED')
 
         if mts:
             mts.shutdown_event.set()
