@@ -3,10 +3,19 @@
 """
 CraneCuber
 A Rubiks cube solving robot made from EV3 + 42009
+
+
+If you are running via ssh do:
+$ sudo chvt 6
+$ ./cranecuber.py
+$ sudo chvt 1
+
+So that the display does not constantly flip back to the Brickman display
 """
 
 from copy import deepcopy
 from ev3dev2 import get_current_platform
+from ev3dev2.display import Display
 from ev3dev2.led import Leds
 from ev3dev2.port import LegoPort
 from ev3dev2.sensor import INPUT_1
@@ -188,6 +197,7 @@ class CraneCuber3x3x3(object):
         self.move_west_to_top_calls = 0
         self.move_down_to_top_calls = 0
         self.leds = Leds()
+        self.display = Display()
 
         if self.emulate:
             self.elevator = DummyMotor(OUTPUT_A)
@@ -309,14 +319,13 @@ class CraneCuber3x3x3(object):
             log.info('shutdown already in progress')
             return
 
-        self.leds.set_color('LEFT', 'RED')
-        self.leds.set_color('RIGHT', 'RED')
         self.shutdown_event.set()
         log.info('shutting down')
+        self.display.reset_screen()
+        self.display.update()
 
         for x in self.motors:
-            x.reset()
-            x.stop(stop_action='coast')
+            x.stop(stop_action='brake')
 
         if self.mts:
             log.info('shutting down mts')
@@ -649,15 +658,18 @@ class CraneCuber3x3x3(object):
                 # If we did not move at least halfway we know the flip jammed up so try again
                 else:
                     self.flipper.stop()
-                    self.flipper.reset()
-                    self.flipper.position = current_pos
-                    log.warning("flip jammed...trying again")
                     sleep(1)
+                    self.flipper.position = current_pos
+                    self.flipper.position_sp = final_pos
+                    self.flipper.speed_sp = flipper_speed
+                    self.flipper.ramp_up_sp = ramp_up_speed
+                    self.flipper.ramp_down_sp = ramp_down_speed
+                    self.flipper.stop_action = 'hold'
+                    log.warning("flip jammed...trying again")
         else:
             raise CubeJammed("jammed on flip, moved %d degrees" % abs(degrees_moved))
 
-        if final_pos == 0 and current_pos != final_pos:
-            self.flipper.position_sp = 0
+        self.flipper.position_sp = final_pos
 
         # facing_west and facing_east won't change
         orig_north = self.facing_north
@@ -886,8 +898,8 @@ class CraneCuber3x3x3(object):
                 log.warning("elevate jammed up, only moved %d, should have moved %d, state %s...attempting to clear (init_pos %d, current_pos %d, final_pos %d)" %
                     (delta, delta_target, self.elevator.state, init_pos, current_pos, final_pos))
                 self.elevator.reset()
-                self.elevator.position = current_pos
                 sleep(1)
+                self.elevator.position = current_pos
 
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
@@ -944,29 +956,43 @@ class CraneCuber3x3x3(object):
         if self.shutdown_event.is_set():
             return
 
+        display_font = "luBS24"
+        x_grid = 4
+        y_grid = 4
+
         log.info("scan()")
         self.colors = {}
+        self.display.text_grid("scan F", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.scan_face('F')
 
         log.warning("expose side-R")
+        self.display.text_grid("scan R", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
         self.scan_face('R')
 
         log.warning("expose side-B")
+        self.display.text_grid("scan B", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
         self.scan_face('B')
 
         log.warning("expose side-L")
+        self.display.text_grid("scan L", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.elevate(0)
         self.scan_face('L')
 
         log.warning("expose side-U")
+        self.display.text_grid("scan U", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.elevate_max()
         self.rotate(clockwise=True, quarter_turns=1)
         self.flip()
@@ -975,6 +1001,8 @@ class CraneCuber3x3x3(object):
         self.scan_face('U')
 
         log.warning("expose side-D")
+        self.display.text_grid("scan D", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.flip()
         self.elevate(1)
         self.flip()
@@ -989,6 +1017,8 @@ class CraneCuber3x3x3(object):
         # is facing the camera like it was when we started the scan
         log.info("\n")
         log.warning("expose side-F (back to where we started)")
+        self.display.text_grid("back to F", clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+        self.display.update()
         self.elevate(1)
         self.flip()
         self.elevate(0)
@@ -1272,9 +1302,14 @@ class CraneCuber3x3x3(object):
 
         Each each east/west move is 2.18 quarter turns
         '''
+        display_font = "luBS24"
+        x_grid = 5
+        y_grid = 4
 
         for (index, action) in enumerate(actions):
             desc = "Move %d/%d : %s" % (index, total_actions, action)
+            self.display.text_grid("%d/%d" % (index, total_actions), clear_screen=True, x=x_grid, y=y_grid, font=display_font)
+            self.display.update()
             print(desc)
             log.info(desc)
 
@@ -1798,7 +1833,6 @@ if __name__ == '__main__':
     cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
     cc.init_motors()
 
-    # dwalton
     while True:
         if cc.shutdown_event.is_set():
             break
@@ -1888,14 +1922,16 @@ if __name__ == '__main__':
 
         #log.info("%s: elevator moved %d degrees total (%d rotations)" % (cc.elevator, cc.elevator.total_distance, int(cc.elevator.total_distance/360)))
         #log.info("%s: turntable moved %d degrees total (%d quarter turns)" % (cc.turntable, cc.turntable.total_distance, int(cc.turntable.total_distance/TURNTABLE_TURN_DEGREES)))
-        log.info("%d move_north_to_top_calls" % cc.move_north_to_top_calls)
-        log.info("%d move_south_to_top_calls" % cc.move_south_to_top_calls)
-        log.info("%d move_east_to_top_calls" % cc.move_east_to_top_calls)
-        log.info("%d move_west_to_top_calls" % cc.move_west_to_top_calls)
-        log.info("%d move_down_to_top_calls" % cc.move_down_to_top_calls)
-        log.info("%d move_calls total" % (cc.move_north_to_top_calls + cc.move_south_to_top_calls + cc.move_east_to_top_calls + cc.move_west_to_top_calls + cc.move_down_to_top_calls))
-        log.info("%d move_calls (east/west) total" % (cc.move_east_to_top_calls + cc.move_west_to_top_calls))
+        #log.info("%d move_north_to_top_calls" % cc.move_north_to_top_calls)
+        #log.info("%d move_south_to_top_calls" % cc.move_south_to_top_calls)
+        #log.info("%d move_east_to_top_calls" % cc.move_east_to_top_calls)
+        #log.info("%d move_west_to_top_calls" % cc.move_west_to_top_calls)
+        #log.info("%d move_down_to_top_calls" % cc.move_down_to_top_calls)
+        #log.info("%d move_calls total" % (cc.move_north_to_top_calls + cc.move_south_to_top_calls + cc.move_east_to_top_calls + cc.move_west_to_top_calls + cc.move_down_to_top_calls))
+        #log.info("%d move_calls (east/west) total" % (cc.move_east_to_top_calls + cc.move_west_to_top_calls))
         cc.shutdown_robot()
+        cc.leds.set_color('LEFT', 'GREEN')
+        cc.leds.set_color('RIGHT', 'GREEN')
 
     except Exception as e:
         log.exception(e)
