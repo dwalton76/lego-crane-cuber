@@ -658,6 +658,7 @@ class CraneCuber3x3x3(object):
                 # If we did not move at least halfway we know the flip jammed up so try again
                 else:
                     self.flipper.stop()
+                    self.flipper.reset()
                     sleep(1)
                     self.flipper.position = current_pos
                     self.flipper.position_sp = final_pos
@@ -897,8 +898,10 @@ class CraneCuber3x3x3(object):
                 current_pos = self.elevator.position
                 log.warning("elevate jammed up, only moved %d, should have moved %d, state %s...attempting to clear (init_pos %d, current_pos %d, final_pos %d)" %
                     (delta, delta_target, self.elevator.state, init_pos, current_pos, final_pos))
+                self.elevator.stop()
                 self.elevator.reset()
                 sleep(1)
+                log.info("elevate state %s" % self.elevator.state)
                 self.elevator.position = current_pos
 
                 self.elevator.run_to_abs_pos(position_sp=0,
@@ -1308,10 +1311,9 @@ class CraneCuber3x3x3(object):
 
         for (index, action) in enumerate(actions):
             desc = "Move %d/%d : %s" % (index, total_actions, action)
+            log.info(desc)
             self.display.text_grid("%d/%d" % (index, total_actions), clear_screen=True, x=x_grid, y=y_grid, font=display_font)
             self.display.update()
-            print(desc)
-            log.info(desc)
 
             if self.shutdown_event.is_set():
                 break
@@ -1786,7 +1788,7 @@ if __name__ == '__main__':
     #logging.basicConfig(filename='/tmp/cranecuber.log',
     #                    level=logging.DEBUG,
     #                    format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
-    logging.basicConfig(level=logging.DEBUG,
+    logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(filename)12s %(levelname)8s: %(message)s')
     log = logging.getLogger(__name__)
 
