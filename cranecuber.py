@@ -248,6 +248,8 @@ class CraneCuber3x3x3(object):
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 80
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -300
         self.SQUISH_DEGREES = 120
+        self.SQUISH_SPEED_CLOSE = 400
+        self.SQUISH_SPEED_OPEN = 400
         self.rows_in_turntable_to_count_as_face_turn = 2
 
     def init_motors(self):
@@ -501,16 +503,17 @@ class CraneCuber3x3x3(object):
             (self.facing_north, self.facing_west, self.facing_south, self.facing_east, self.facing_up, self.facing_down))
 
     def squish(self):
+
         # positive closes the squisher
         self.turntable.stop(stop_action='hold')
         self.squisher.reset()
-        self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES, speed_sp=400, stop_action='brake')
+        self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES, speed_sp=self.SQUISH_SPEED_CLOSE, stop_action='brake')
         self.squisher.wait_until_moving()
         self.squisher.wait_until_not_moving(timeout=5000)
         self.squisher.stop()
 
         # negative opens the squisher
-        self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES * -1, speed_sp=400, stop_action='coast')
+        self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES * -1, speed_sp=self.SQUISH_SPEED_OPEN, stop_action='coast')
         self.squisher.wait_until_moving()
         self.squisher.wait_until_not_moving(timeout=2000)
         self.squisher.stop()
@@ -1670,7 +1673,8 @@ class CraneCuber6x6x6(CraneCuber3x3x3):
         self.TURN_BLOCKED_TOUCH_DEGREES = 68
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 26
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -90
-        self.SQUISH_DEGREES = 60
+        self.SQUISH_DEGREES = 80
+        self.SQUISH_SPEED_CLOSE = 400
         self.rows_in_turntable_to_count_as_face_turn = 6
         log.warning("Using CraneCuber6x6x6, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
@@ -1685,6 +1689,7 @@ class CraneCuber7x7x7(CraneCuber3x3x3):
         self.TURN_BLOCKED_SQUARE_TT_DEGREES = 26
         self.TURN_BLOCKED_SQUARE_CUBE_DEGREES = -90
         self.SQUISH_DEGREES = 55
+        self.SQUISH_SPEED_CLOSE = 400
         self.rows_in_turntable_to_count_as_face_turn = 4
         log.warning("Using CraneCuber7x7x7, rows_in_turntable_to_count_as_face_turn %d" % self.rows_in_turntable_to_count_as_face_turn)
 
