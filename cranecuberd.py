@@ -42,13 +42,6 @@ def get_random_string(length=6):
     return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(length))
 
 
-def rotate_image(image, angle):
-    image_center = tuple(np.array(image.shape[1::-1]) / 2)
-    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
-    return result
-
-
 class CraneCuberDaemon(object):
 
     def __init__(self, dev_video, ip, port):
@@ -163,10 +156,6 @@ class CraneCuberDaemon(object):
                             camera = None
 
                             if retval:
-                                # Images for sides U and D need to be rotated 90 degrees
-                                if side_name in ('U', 'D'):
-                                    img = rotate_image(img, 90)
-
                                 # Save the image to disk
                                 cv2.imwrite(png_filename, img)
 
@@ -200,7 +189,14 @@ class CraneCuberDaemon(object):
                             response = subprocess.check_output(cmd).strip()
 
                         elif data.startswith('GET_SOLUTION:'):
-                            cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s" % data.split(':')[1]
+                            cube_state = data.split(':')[1]
+
+                            if len(cube_state) <= 96:
+                                cpu_mode = "--normal"
+                            else:
+                                cpu_mode = "--fast"
+
+                            cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py %s --state %s" % (cpu_mode, cube_state)
                             log.info("cmd: %s" % cmd)
                             response = subprocess.check_output(cmd, shell=True).strip()
 
