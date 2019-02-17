@@ -3,6 +3,12 @@
 """
 CraneCuber
 A Rubiks cube solving robot made from EV3 + 42009
+
+Motor connections
+- A is elevator
+- B is flipper
+- C is turntable
+- D is squisher
 """
 
 from copy import deepcopy
