@@ -12,7 +12,6 @@ import string
 import subprocess
 import sys
 import numpy as np
-from daemon import DaemonContext
 from threading import Event
 
 SCRATCHPAD_DIR = '/tmp/cranecuberd/'
@@ -257,6 +256,7 @@ if __name__ == '__main__':
     ccd = CraneCuberDaemon(parser_args.video, parser_args.ip, parser_args.port)
 
     if parser_args.daemon:
+        from daemon import DaemonContext
         context = DaemonContext(
             working_directory=SCRATCHPAD_DIR,
             signal_map={
