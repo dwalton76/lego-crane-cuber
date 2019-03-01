@@ -4,13 +4,18 @@
 CraneCuber
 A Rubiks cube solving robot made from EV3 + 42009
 
-
 If you are running via ssh do:
 $ sudo chvt 6
 $ ./cranecuber.py
 $ sudo chvt 1
 
 So that the display does not constantly flip back to the Brickman display
+
+Motor connections
+- A is elevator
+- B is flipper
+- C is turntable
+- D is squisher
 """
 
 from copy import deepcopy

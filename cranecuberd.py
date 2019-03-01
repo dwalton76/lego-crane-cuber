@@ -12,7 +12,6 @@ import string
 import subprocess
 import sys
 import numpy as np
-from daemon import DaemonContext
 from threading import Event
 
 SCRATCHPAD_DIR = '/tmp/cranecuberd/'
@@ -40,13 +39,6 @@ def get_random_string(length=6):
     Return a random string 'length' characters long
     """
     return ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits) for _ in range(length))
-
-
-def rotate_image(image, angle):
-    image_center = tuple(np.array(image.shape[1::-1]) / 2)
-    rot_mat = cv2.getRotationMatrix2D(image_center, angle, 1.0)
-    result = cv2.warpAffine(image, rot_mat, image.shape[1::-1], flags=cv2.INTER_LINEAR)
-    return result
 
 
 class CraneCuberDaemon(object):
@@ -163,10 +155,6 @@ class CraneCuberDaemon(object):
                             camera = None
 
                             if retval:
-                                # Images for sides U and D need to be rotated 90 degrees
-                                if side_name in ('U', 'D'):
-                                    img = rotate_image(img, 90)
-
                                 # Save the image to disk
                                 cv2.imwrite(png_filename, img)
 
@@ -200,7 +188,14 @@ class CraneCuberDaemon(object):
                             response = subprocess.check_output(cmd).strip()
 
                         elif data.startswith('GET_SOLUTION:'):
-                            cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py --state %s" % data.split(':')[1]
+                            cube_state = data.split(':')[1]
+
+                            if len(cube_state) <= 96:
+                                cpu_mode = "--normal"
+                            else:
+                                cpu_mode = "--fast"
+
+                            cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py %s --state %s" % (cpu_mode, cube_state)
                             log.info("cmd: %s" % cmd)
                             response = subprocess.check_output(cmd, shell=True).strip()
 
@@ -213,7 +208,7 @@ class CraneCuberDaemon(object):
                         # TX our response and close the socket
                         connection.send(response)
                         connection.close()
-                        log.info("TXed %s response %s" % (data, response))
+                        log.info("TXed %s response\n%s\n\n" % (data, response))
 
                         # We have the entire msg so break out of the inside 'while True' loop
                         break
@@ -261,6 +256,7 @@ if __name__ == '__main__':
     ccd = CraneCuberDaemon(parser_args.video, parser_args.ip, parser_args.port)
 
     if parser_args.daemon:
+        from daemon import DaemonContext
         context = DaemonContext(
             working_directory=SCRATCHPAD_DIR,
             signal_map={
