@@ -177,6 +177,11 @@ class CraneCuberDaemon(object):
                             log.info("cmd: %s" % ' '.join(cmd))
                             response = subprocess.check_output(cmd).strip()
 
+                        elif data.startswith('GET_CUBE_STATE_OLD:'):
+                            cmd = ['rubiks-color-resolver-old.py', '--json', '--rgb', data[len('GET_CUBE_STATE_OLD:'):]]
+                            log.info("cmd: %s" % ' '.join(cmd))
+                            response = subprocess.check_output(cmd).strip()
+
                         elif data == 'GET_CUBE_STATE_FROM_PICS':
                             # Have not tested this
                             cmd = ['rubiks-cube-tracker.py', '--directory', SCRATCHPAD_DIR]
