@@ -1830,7 +1830,6 @@ if __name__ == '__main__':
     platform = get_current_platform()
 
     if platform == 'brickpi3':
-
         # http://docs.ev3dev.org/projects/lego-linux-drivers/en/ev3dev-jessie/sensors.html
         sensor_port1 = LegoPort(INPUT_4)
         sensor_port1.mode = 'ev3-analog'
@@ -1876,6 +1875,10 @@ if __name__ == '__main__':
 
             # Use a CraneCuber6x6x6 object for scanning
             cc = CraneCuber6x6x6(SERVER, args.emulate, platform)
+
+            if platform == 'brickpi3':
+                cc.leds = None
+
             mts.cc = cc
             cc.mts = mts
             cc.init_motors()
@@ -1919,6 +1922,9 @@ if __name__ == '__main__':
                 pass
             else:
                 raise Exception("%dx%dx%d cubes are not yet supported" % (size, size, size))
+
+            if platform == 'brickpi3':
+                cc.leds = None
 
             mts.cc = cc
             cc.mts = mts
