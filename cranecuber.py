@@ -23,7 +23,7 @@ from ev3dev2 import get_current_platform
 from ev3dev2.display import Display
 from ev3dev2.led import Leds
 from ev3dev2.port import LegoPort
-from ev3dev2.sensor import INPUT_1
+from ev3dev2.sensor import INPUT_1, INPUT_2, INPUT_3, INPUT_4
 from ev3dev2.sensor.lego import TouchSensor
 from ev3dev2.motor import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D, LargeMotor, MediumMotor
 from math import pi, sqrt
@@ -269,8 +269,9 @@ class CraneCuber3x3x3(object):
 
     def init_motors(self):
 
-        self.leds.set_color('LEFT', 'ORANGE')
-        self.leds.set_color('RIGHT', 'ORANGE')
+        if self.leds:
+            self.leds.set_color('LEFT', 'ORANGE')
+            self.leds.set_color('RIGHT', 'ORANGE')
 
         # 'brake' stops but doesn't hold the motor in place
         # 'hold' stops and holds the motor in place
@@ -315,8 +316,9 @@ class CraneCuber3x3x3(object):
         self.squisher_reset()
         self.squisher.stop(stop_action='brake')
 
-        self.leds.set_color('LEFT', 'GREEN')
-        self.leds.set_color('RIGHT', 'GREEN')
+        if self.leds:
+            self.leds.set_color('LEFT', 'GREEN')
+            self.leds.set_color('RIGHT', 'GREEN')
 
     def shutdown_robot(self):
 
@@ -1830,7 +1832,7 @@ if __name__ == '__main__':
     if platform == 'brickpi3':
 
         # http://docs.ev3dev.org/projects/lego-linux-drivers/en/ev3dev-jessie/sensors.html
-        sensor_port1 = LegoPort(INPUT_1)
+        sensor_port1 = LegoPort(INPUT_4)
         sensor_port1.mode = 'ev3-analog'
         sensor_port1.set_device = 'lego-ev3-touch'
 
@@ -1885,8 +1887,10 @@ if __name__ == '__main__':
             while not cc.shutdown_event.is_set() and cc.waiting_for_touch_sensor.is_set():
                 sleep (0.1)
 
-            cc.leds.set_color('LEFT', 'ORANGE')
-            cc.leds.set_color('RIGHT', 'ORANGE')
+            if cc.leds:
+                cc.leds.set_color('LEFT', 'ORANGE')
+                cc.leds.set_color('RIGHT', 'ORANGE')
+
             cc.scan()
             cc.get_colors()
 
@@ -1922,8 +1926,10 @@ if __name__ == '__main__':
             cc.resolve_colors()
             cc.resolve_actions()
 
-            cc.leds.set_color('LEFT', 'GREEN')
-            cc.leds.set_color('RIGHT', 'GREEN')
+            if cc.leds:
+                cc.leds.set_color('LEFT', 'GREEN')
+                cc.leds.set_color('RIGHT', 'GREEN')
+
             if cc.shutdown_event.is_set() or args.emulate:
                 break
 
@@ -1937,13 +1943,17 @@ if __name__ == '__main__':
         #log.info("%d move_calls total" % (cc.move_north_to_top_calls + cc.move_south_to_top_calls + cc.move_east_to_top_calls + cc.move_west_to_top_calls + cc.move_down_to_top_calls))
         #log.info("%d move_calls (east/west) total" % (cc.move_east_to_top_calls + cc.move_west_to_top_calls))
         cc.shutdown_robot()
-        cc.leds.set_color('LEFT', 'GREEN')
-        cc.leds.set_color('RIGHT', 'GREEN')
+
+        if cc.leds:
+            cc.leds.set_color('LEFT', 'GREEN')
+            cc.leds.set_color('RIGHT', 'GREEN')
 
     except Exception as e:
         log.exception(e)
-        cc.leds.set_color('LEFT', 'RED')
-        cc.leds.set_color('RIGHT', 'RED')
+
+        if cc and cc.leds:
+            cc.leds.set_color('LEFT', 'RED')
+            cc.leds.set_color('RIGHT', 'RED')
 
         if mts:
             mts.shutdown_event.set()
