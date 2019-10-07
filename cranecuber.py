@@ -282,7 +282,7 @@ class CraneCuber3x3x3(object):
         '''
         log.info("Initialize elevator %s - lower all the way down" % self.elevator)
         self.elevator.run_forever(speed_sp=10, stop_action='brake')
-        self.elevator.wait_until_moving()
+        self.elevator.wait_until(LargeMotor.STATE_RUNNING)
         self.elevator.wait_until_not_moving(timeout=10000)
         self.elevator.stop()
         self.elevator.reset()
@@ -292,21 +292,24 @@ class CraneCuber3x3x3(object):
         self.elevator.reset()
         self.elevator.stop(stop_action='coast')
         self.elevator.run_to_rel_pos(speed_sp=200, position_sp=-50)
-        self.elevator.wait_until_moving(timeout=4000)
+        self.elevator.wait_until(LargeMotor.STATE_RUNNING, timeout=4000)
         self.elevator.wait_until_not_moving(timeout=4000)
+        self.elevator.stop()
 
         log.info("Initialize elevator %s - lower back down" % self.elevator)
         self.elevator.run_forever(speed_sp=20)
-        if self.elevator.wait_until_moving(timeout=3000):
+        if self.elevator.wait_until(LargeMotor.STATE_RUNNING, timeout=3000):
             self.elevator.wait_until_not_moving(timeout=15000)
         self.elevator.position = 0
+        self.elevator.stop()
 
         log.info("Initialize flipper %s" % self.flipper)
         self.flipper.run_forever(speed_sp=150, stop_action='hold')
-        if self.flipper.wait_until_moving(timeout=4000):
+        if self.flipper.wait_until(MediumMotor.STATE_RUNNING, timeout=4000):
             self.flipper.wait_until_not_moving(timeout=4000)
         self.flipper.position = 0
         self.flipper_at_init = True
+        self.flipper.stop()
 
         log.info("Initialize turntable %s" % self.turntable)
         self.turntable.reset()
@@ -408,10 +411,10 @@ class CraneCuber3x3x3(object):
         self.squisher.run_to_abs_pos()
 
         #log.info("waiting for turntable to move...")
-        self.turntable.wait_until_moving(timeout=2000)
+        self.turntable.wait_until(LargeMotor.STATE_RUNNING, timeout=2000)
 
         #log.info("waiting for squisher to move...")
-        self.squisher.wait_until_moving(timeout=2000)
+        self.squisher.wait_until(LargeMotor.STATE_RUNNING, timeout=2000)
 
         # Now wait for both to stop
         #log.info("waiting for turntable to stop at %s..." % final_turntable_pos)
@@ -524,20 +527,20 @@ class CraneCuber3x3x3(object):
         self.turntable.stop(stop_action='hold')
         self.squisher.reset()
         self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES, speed_sp=self.SQUISH_SPEED_CLOSE, stop_action='brake')
-        self.squisher.wait_until_moving()
+        self.squisher.wait_until(LargeMotor.STATE_RUNNING)
         self.squisher.wait_until_not_moving(timeout=5000)
         self.squisher.stop()
 
         # negative opens the squisher
         self.squisher.run_to_rel_pos(position_sp=self.SQUISH_DEGREES * -1, speed_sp=self.SQUISH_SPEED_OPEN, stop_action='coast')
-        self.squisher.wait_until_moving()
+        self.squisher.wait_until(LargeMotor.STATE_RUNNING)
         self.squisher.wait_until_not_moving(timeout=2000)
         self.squisher.stop()
         self.turntable.stop(stop_action='brake')
 
     def squisher_reset(self):
         self.squisher.run_forever(speed_sp=-40, stop_action='coast')
-        self.squisher.wait_until_moving()
+        self.squisher.wait_until(LargeMotor.STATE_RUNNING)
         self.squisher.wait_until_not_moving(timeout=10000)
         self.squisher.reset()
 
@@ -558,7 +561,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=0,
                                     stop_action='hold')
-        self.flipper.wait_until_moving()
+        self.flipper.wait_until(MediumMotor.STATE_RUNNING)
         self.flipper.wait_until_not_moving(timeout=2000)
 
         if self.shutdown_event.is_set():
@@ -570,7 +573,7 @@ class CraneCuber3x3x3(object):
                                     ramp_up_sp=0,
                                     ramp_down_sp=500,
                                     stop_action='hold')
-        self.flipper.wait_until_moving()
+        self.flipper.wait_until(MediumMotor.STATE_RUNNING)
         self.flipper.wait_until_not_moving(timeout=2000)
 
     def flip_to_init(self):
@@ -591,7 +594,7 @@ class CraneCuber3x3x3(object):
         if abs(init_pos) <= abs(int(FLIPPER_DEGREES/2)):
             final_pos = FLIPPER_DEGREES
         else:
-            final_pos = 0
+            final_pos = 15
 
         # If you flip too fast the momentum can cause the cube to slide a
         # little when the flipper stops.  When the cube slides like this it is
@@ -634,7 +637,7 @@ class CraneCuber3x3x3(object):
             self.flipper.run_to_abs_pos()
 
             #log.info("flipper wait_until_moving...")
-            self.flipper.wait_until_moving(timeout=1000)
+            self.flipper.wait_until(MediumMotor.STATE_RUNNING, timeout=2000)
 
             #log.info("flipper wait_until_not_moving...")
             self.flipper.wait_until_not_moving(timeout=4000)
@@ -646,6 +649,7 @@ class CraneCuber3x3x3(object):
 
             # log.info("flipper not moving, at_init %s, final_pos %s, position %s" % (self.flipper_at_init, final_pos, self.flipper.position))
 
+            self.flipper.stop()
             finish = datetime.datetime.now()
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_flip += delta_ms
@@ -866,7 +870,7 @@ class CraneCuber3x3x3(object):
                                              ramp_down_sp=400,
                                              stop_action='hold')
             #log.info("elevate down: wait_until running")
-            self.elevator.wait_until_moving(timeout=3000)
+            self.elevator.wait_until(LargeMotor.STATE_RUNNING, timeout=3000)
             #log.info("elevate down: running, wait_until_not_moving")
             self.elevator.wait_until_not_moving(timeout=3000)
             #log.info("elevate down: not_moving")
@@ -891,7 +895,7 @@ class CraneCuber3x3x3(object):
                                              stop_action='hold')
 
             #log.info("elevate up: wait_until running")
-            self.elevator.wait_until_moving(timeout=3000)
+            self.elevator.wait_until(LargeMotor.STATE_RUNNING, timeout=3000)
             #log.info("elevate up: running, wait_until_not_moving")
             self.elevator.wait_until_not_moving(timeout=3000)
             #log.info("elevate up: not_moving")
@@ -914,7 +918,7 @@ class CraneCuber3x3x3(object):
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
                                              stop_action='hold')
-                self.elevator.wait_until_moving(timeout=3000)
+                self.elevator.wait_until(LargeMotor.STATE_RUNNING, timeout=3000)
                 self.elevator.wait_until_not_moving(timeout=3000)
 
                 self.squisher_reset()
@@ -926,7 +930,7 @@ class CraneCuber3x3x3(object):
                                              ramp_up_sp=200, # ramp_up here so we don't slam into the cube at full speed
                                              ramp_down_sp=50, # ramp_down so we stop at the right spot
                                              stop_action='hold')
-                self.elevator.wait_until_moving(timeout=3000)
+                self.elevator.wait_until(LargeMotor.STATE_RUNNING, timeout=3000)
                 self.elevator.wait_until_not_moving(timeout=3000)
 
                 current_pos = self.elevator.position
@@ -1835,10 +1839,9 @@ if __name__ == '__main__':
         sensor_port1.mode = 'ev3-analog'
         sensor_port1.set_device = 'lego-ev3-touch'
 
-
     # Uncomment to test elevate(), flip(), etc
     '''
-    cc = CraneCuber4x4x4(SERVER, args.emulate, platform)
+    cc = CraneCuber6x6x6(SERVER, args.emulate, platform)
     cc.init_motors()
 
     while True:
@@ -1846,9 +1849,14 @@ if __name__ == '__main__':
             break
 
         log.info("\n\n\n\n\n\n")
-        #cc.flip()
-        cc.elevate_max()
-        cc.rotate(clockwise=True, quarter_turns=1)
+        # cc.flip()
+
+        cc.elevate(1)
+        log.info("PAUSED")
+        input("PAUSED")
+
+        #cc.elevate_max()
+        #cc.rotate(clockwise=True, quarter_turns=1)
         cc.elevate(0)
 
         log.info("PAUSED")

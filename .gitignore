@@ -3,3 +3,5 @@ __pycache__
 server.conf
 index.html
 cache
+.vscode
+rubiks-color-resolver.html

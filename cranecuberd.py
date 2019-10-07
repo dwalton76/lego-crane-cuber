@@ -117,35 +117,20 @@ class CraneCuberDaemon(object):
                             png_filename = os.path.join(SCRATCHPAD_DIR, 'rubiks-side-%s.png' % side_name)
 
                             if side_name == 'F':
-
                                 for filename in os.listdir(SCRATCHPAD_DIR):
                                     if filename.endswith('.png'):
                                         os.unlink(os.path.join(SCRATCHPAD_DIR, filename))
 
-                                # Take a pic but throw it away, we do this so the camera adjusts the current lighting conditions
-                                camera = cv2.VideoCapture(self.dev_video)
-                                camera.read()
-                                del(camera)
-                                camera = None
+                            # Take a pic but throw it away, we do this so the camera
+                            # adjusts to the current lighting conditions
+                            camera = cv2.VideoCapture(self.dev_video)
+                            camera.read()
+                            del(camera)
+                            camera = None
 
-                                # Now take a pic, keep it and note the brightness, etc
-                                camera = cv2.VideoCapture(self.dev_video)
-                                (retval, img) = camera.read()
-
-                                brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
-                                contrast = camera.get(cv2.CAP_PROP_CONTRAST)
-                                saturation = camera.get(cv2.CAP_PROP_SATURATION)
-                                gain = camera.get(cv2.CAP_PROP_GAIN)
-
-                            else:
-                                # Set the brightness, etc to be the same as when we took a pic of side F.
-                                # This makes rubiks-color-resolver's job much easier.
-                                camera = cv2.VideoCapture(self.dev_video)
-                                camera.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
-                                camera.set(cv2.CAP_PROP_CONTRAST, contrast)
-                                camera.set(cv2.CAP_PROP_SATURATION, saturation)
-                                camera.set(cv2.CAP_PROP_GAIN, gain)
-                                (retval, img) = camera.read()
+                            # Now take a pic and keep it
+                            camera = cv2.VideoCapture(self.dev_video)
+                            (retval, img) = camera.read()
 
                             # If you do not delete the VideoCapture object opencv2 will sometimes return the
                             # exact same image when you call read() back-to-back.  This is really bad when
@@ -155,9 +140,7 @@ class CraneCuberDaemon(object):
                             camera = None
 
                             if retval:
-                                # Save the image to disk
                                 cv2.imwrite(png_filename, img)
-
                                 size = os.path.getsize(png_filename)
 
                                 if size:
@@ -174,21 +157,6 @@ class CraneCuberDaemon(object):
 
                         elif data.startswith('GET_CUBE_STATE:'):
                             cmd = ['rubiks-color-resolver.py', '--json', '--rgb', data[len('GET_CUBE_STATE:'):]]
-                            log.info("cmd: %s" % ' '.join(cmd))
-                            response = subprocess.check_output(cmd).strip()
-
-                        elif data.startswith('GET_CUBE_STATE_OLD:'):
-                            cmd = ['rubiks-color-resolver-old.py', '--json', '--rgb', data[len('GET_CUBE_STATE_OLD:'):]]
-                            log.info("cmd: %s" % ' '.join(cmd))
-                            response = subprocess.check_output(cmd).strip()
-
-                        elif data == 'GET_CUBE_STATE_FROM_PICS':
-                            # Have not tested this
-                            cmd = ['rubiks-cube-tracker.py', '--directory', SCRATCHPAD_DIR]
-                            log.info("cmd: %s" % ' '.join(cmd))
-                            rgb = subprocess.check_output(cmd).strip()
-
-                            cmd = ['rubiks-color-resolver.py', '--json', '--rgb', rgb]
                             log.info("cmd: %s" % ' '.join(cmd))
                             response = subprocess.check_output(cmd).strip()
 
@@ -239,7 +207,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description="takepidc: daemon that takes webcam pics via OpenCV")
     parser.add_argument('-d', '--daemon', help='run as a daemon', action='store_true', default=False)
-    parser.add_argument('--video', type=int, default=0, help='The X in /dev/videoX')
+    parser.add_argument('--video', type=int, default=1, help='The X in /dev/videoX')
     parser.add_argument('--ip', type=str, default='')
     parser.add_argument('--port', type=int, default=10000)
     parser_args = parser.parse_args()
