@@ -33,7 +33,7 @@ $ cd ~/
 $ sudo apt-get install git fswebcam python-pil python-opencv
 $ git clone https://github.com/dwalton76/lego-crane-cuber.git
 $ cd ~/lego-crane-cuber
-$ sudo ./crancecuberd.py
+$ sudo ./cranecuberd.py
 ```
 
 
@@ -45,5 +45,5 @@ $ sudo apt-get install git fswebcam python-pil python-opencv
 $ git clone https://github.com/dwalton76/lego-crane-cuber.git
 $ cd ~/lego-crane-cuber
 $ echo 'x.x.x.x' > server.conf
-$ ./crancecuber.py
+$ ./cranecuber.py
 ```
