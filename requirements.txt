@@ -1,0 +1,6 @@
+wheel
+setuptools
+python-daemon
+opencv-python
+git+https://github.com/dwalton76/rubiks-cube-tracker.git
+git+https://github.com/dwalton76/rubiks-color-resolver.git
