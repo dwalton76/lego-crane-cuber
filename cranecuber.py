@@ -930,26 +930,41 @@ class CraneCuber3x3x3(object):
                 self.elevator.stop()
                 self.elevator.reset()
                 sleep(1)
-                log.info("elevate state %s" % self.elevator.state)
                 self.elevator.position = current_pos
 
+                log.info("elevate up jam clear: pre run_to_abs_pos state %s" % self.elevator.state)
                 self.elevator.run_to_abs_pos(position_sp=0,
                                              speed_sp=self.ELEVATOR_SPEED_DOWN_SLOW,
                                              stop_action='hold')
+                log.info("elevate up jam clear: post run_to_abs_pos state %s" % self.elevator.state)
+
+                log.info("elevate up jam clear: pre wait_until running state %s" % self.elevator.state)
                 self.elevator.wait_until("running", timeout=3000)
+                log.info("elevate up jam clear: post wait_until running state %s" % self.elevator.state)
+
+                log.info("elevate up jam clear: pre wait_until_not_moving state %s" % self.elevator.state)
                 self.elevator.wait_until_not_moving(timeout=3000)
+                log.info("elevate up jam clear: post wait_until_not_moving state %s" % self.elevator.state)
 
                 self.squisher_reset()
                 self.flip(slow=True)
                 self.flip(slow=True)
 
+                log.info("elevate up jam clear: pre run_to_abs_pos state %s" % self.elevator.state)
                 self.elevator.run_to_abs_pos(position_sp=final_pos,
                                              speed_sp=self.ELEVATOR_SPEED_UP_FAST,
                                              ramp_up_sp=200, # ramp_up here so we don't slam into the cube at full speed
-                                             ramp_down_sp=50, # ramp_down so we stop at the right spot
+                                             ramp_down_sp=400, # ramp_down so we stop at the right spot
                                              stop_action='hold')
+                log.info("elevate up jam clear: post run_to_abs_pos state %s" % self.elevator.state)
+
+                log.info("elevate up jam clear: pre wait_until running state %s" % self.elevator.state)
                 self.elevator.wait_until("running", timeout=3000)
+                log.info("elevate up jam clear: post wait_until running state %s" % self.elevator.state)
+
+                log.info("elevate up jam clear: pre wait_until_not_moving state %s" % self.elevator.state)
                 self.elevator.wait_until_not_moving(timeout=3000)
+                log.info("elevate up jam clear: post wait_until_not_moving state %s" % self.elevator.state)
 
                 current_pos = self.elevator.position
                 delta = abs(current_pos - init_pos)
@@ -1532,14 +1547,9 @@ class CraneCuber3x3x3(object):
             #self.rows_and_cols = 6
 
         else:
-            if self.rows_and_cols <= 5:
-                solution_timeout = 90
-
-            # Sometimes it can take 10s of seconds to compute the solution for the centers of a 7x7x7
-            else:
-                solution_timeout = 300
-
+            solution_timeout = 300
             output = send_command(self.SERVER, 10000, "GET_SOLUTION:%s" % self.cube_for_resolver, timeout=solution_timeout).splitlines()
+
             for line in output:
                 if line.startswith("Solution:"):
                     solution = line.split(":")[1].strip().split()
