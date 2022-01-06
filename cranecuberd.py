@@ -66,6 +66,28 @@ class CraneCuberDaemon(object):
 
         tcp_socket = open_tcp_socket(self.ip, self.port)
 
+        # calibrate the camera settings
+        # Take a pic but throw it away, we do this so the camera adjusts the current lighting conditions
+        log.info("take first pic")
+        camera = cv2.VideoCapture(self.dev_video)
+        camera.read()
+        del(camera)
+        camera = None
+        sleep(3)
+
+        # Now take a pic and note the brightness, etc
+        log.info("take second pic")
+        camera = cv2.VideoCapture(self.dev_video)
+        (retval, img) = camera.read()
+
+        brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
+        contrast = camera.get(cv2.CAP_PROP_CONTRAST)
+        saturation = camera.get(cv2.CAP_PROP_SATURATION)
+        gain = camera.get(cv2.CAP_PROP_GAIN)
+        del(camera)
+        camera = None
+        log.info("brightness %s, contrast %s, saturation %s, gain %s" % (brightness, contrast, saturation, gain))
+
         while True:
 
             # Wrap everything else in try/except so that we can log errors
@@ -118,32 +140,9 @@ class CraneCuberDaemon(object):
                             png_filename = os.path.join(SCRATCHPAD_DIR, 'rubiks-side-%s.png' % side_name)
 
                             if side_name == 'F':
-
                                 for filename in os.listdir(SCRATCHPAD_DIR):
                                     if filename.endswith('.png'):
                                         os.unlink(os.path.join(SCRATCHPAD_DIR, filename))
-
-                                # Take a pic but throw it away, we do this so the camera adjusts the current lighting conditions
-                                log.info("take first pic")
-                                camera = cv2.VideoCapture(self.dev_video)
-                                camera.read()
-                                del(camera)
-                                camera = None
-                                sleep(3)
-
-                                # Now take a pic, keep it and note the brightness, etc
-                                log.info("take second pic")
-                                camera = cv2.VideoCapture(self.dev_video)
-                                (retval, img) = camera.read()
-
-                                brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
-                                contrast = camera.get(cv2.CAP_PROP_CONTRAST)
-                                saturation = camera.get(cv2.CAP_PROP_SATURATION)
-                                gain = camera.get(cv2.CAP_PROP_GAIN)
-                                del(camera)
-                                camera = None
-                                sleep(3)
-                                log.info("take third pic")
 
                             # Set the brightness, etc to be the same as when we took a pic of side F.
                             # This makes rubiks-color-resolver's job much easier.
