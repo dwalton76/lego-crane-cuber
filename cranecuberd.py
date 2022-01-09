@@ -13,6 +13,7 @@ import subprocess
 import sys
 import numpy as np
 from threading import Event
+from time import sleep
 
 SCRATCHPAD_DIR = '/tmp/cranecuberd/'
 
@@ -64,6 +65,28 @@ class CraneCuberDaemon(object):
         log.info('cranecuberd started with PID %s for /dev/video%d' % (pid, self.dev_video))
 
         tcp_socket = open_tcp_socket(self.ip, self.port)
+
+        # calibrate the camera settings
+        # Take a pic but throw it away, we do this so the camera adjusts the current lighting conditions
+        log.info("take first pic")
+        camera = cv2.VideoCapture(self.dev_video)
+        camera.read()
+        del(camera)
+        camera = None
+        sleep(3)
+
+        # Now take a pic and note the brightness, etc
+        log.info("take second pic")
+        camera = cv2.VideoCapture(self.dev_video)
+        (retval, img) = camera.read()
+
+        brightness = camera.get(cv2.CAP_PROP_BRIGHTNESS)
+        contrast = camera.get(cv2.CAP_PROP_CONTRAST)
+        saturation = camera.get(cv2.CAP_PROP_SATURATION)
+        gain = camera.get(cv2.CAP_PROP_GAIN)
+        del(camera)
+        camera = None
+        log.info("brightness %s, contrast %s, saturation %s, gain %s" % (brightness, contrast, saturation, gain))
 
         while True:
 
@@ -121,15 +144,13 @@ class CraneCuberDaemon(object):
                                     if filename.endswith('.png'):
                                         os.unlink(os.path.join(SCRATCHPAD_DIR, filename))
 
-                            # Take a pic but throw it away, we do this so the camera
-                            # adjusts to the current lighting conditions
+                            # Set the brightness, etc to be the same as when we took a pic of side F.
+                            # This makes rubiks-color-resolver's job much easier.
                             camera = cv2.VideoCapture(self.dev_video)
-                            camera.read()
-                            del(camera)
-                            camera = None
-
-                            # Now take a pic and keep it
-                            camera = cv2.VideoCapture(self.dev_video)
+                            camera.set(cv2.CAP_PROP_BRIGHTNESS, brightness)
+                            camera.set(cv2.CAP_PROP_CONTRAST, contrast)
+                            camera.set(cv2.CAP_PROP_SATURATION, saturation)
+                            camera.set(cv2.CAP_PROP_GAIN, gain)
                             (retval, img) = camera.read()
 
                             # If you do not delete the VideoCapture object opencv2 will sometimes return the
@@ -162,13 +183,7 @@ class CraneCuberDaemon(object):
 
                         elif data.startswith('GET_SOLUTION:'):
                             cube_state = data.split(':')[1]
-
-                            if len(cube_state) <= 96:
-                                cpu_mode = "--normal"
-                            else:
-                                cpu_mode = "--fast"
-
-                            cmd = "cd ~/rubiks-cube-NxNxN-solver/; ./usr/bin/rubiks-cube-solver.py %s --state %s" % (cpu_mode, cube_state)
+                            cmd = "cd /home/robot/rubiks-cube-NxNxN-solver/; ./rubiks-cube-solver.py --state %s" % cube_state
                             log.info("cmd: %s" % cmd)
                             response = subprocess.check_output(cmd, shell=True).strip()
 
