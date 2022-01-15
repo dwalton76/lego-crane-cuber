@@ -254,9 +254,9 @@ class CraneCuber3x3x3(object):
         # positive moves down
         # negative moves up
         self.ELEVATOR_SPEED_UP_FAST = 1020
-        self.ELEVATOR_SPEED_UP_SLOW = 1020
+        self.ELEVATOR_SPEED_UP_SLOW = 800
         self.ELEVATOR_SPEED_DOWN_FAST = 1020
-        self.ELEVATOR_SPEED_DOWN_SLOW = 1020
+        self.ELEVATOR_SPEED_DOWN_SLOW = 600
 
         # These numbers are for a 57mm 3x3x3 cube
         self.TURN_BLOCKED_TOUCH_DEGREES = 214
@@ -405,27 +405,31 @@ class CraneCuber3x3x3(object):
         self.squisher.position_sp = final_squisher_position
         self.squisher.speed_sp = squisher_speed
 
+        # log.info("_rotate pre run_to_abs_pos turntable state %s" % self.turntable.state)
         self.turntable.run_to_abs_pos()
+        # log.info("_rotate post run_to_abs_pos turntable state %s" % self.turntable.state)
+        # log.info("_rotate pre run_to_abs_pos squisher state %s" % self.squisher.state)
         self.squisher.run_to_abs_pos()
+        # log.info("_rotate post run_to_abs_pos squisher state %s" % self.squisher.state)
 
-        #log.info("waiting for turntable to move...")
+        # log.info("_rotate pre wait_until running turntable state %s" % self.turntable.state)
         self.turntable.wait_until("running", timeout=2000)
-
-        #log.info("waiting for squisher to move...")
+        # log.info("_rotate post wait_until running turntable state %s" % self.turntable.state)
+        # log.info("_rotate pre wait_until running squisher state %s" % self.squisher.state)
         self.squisher.wait_until("running", timeout=2000)
+        # log.info("_rotate post wait_until running squisher state %s" % self.squisher.state)
 
         # Now wait for both to stop
-        #log.info("waiting for turntable to stop at %s..." % final_turntable_pos)
+        # log.info("_rotate pre wait_until_not_moving turntable state %s" % self.turntable.state)
         self.turntable.wait_until_not_moving(timeout=2000)
-        #self.turntable.wait_until_position(final_turntable_pos)
-
-        #log.info("waiting for squisher to stop at %s..." % final_squisher_position)
+        # log.info("_rotate post wait_until_not_moving turntable state %s" % self.turntable.state)
+        # log.info("_rotate pre wait_until_not_moving squisher state %s" % self.squisher.state)
         self.squisher.wait_until_not_moving(timeout=2000)
-        #self.squisher.wait_until_position(final_squisher_position)
+        # log.info("_rotate post wait_until_not_moving squisher state %s" % self.squisher.state)
 
-        #log.info("end _rotate() to %s, speed %d, must_be_accurate %s, %s is %s went %s->%s, squisher %s" %\
-        #    (final_turntable_pos, speed, must_be_accurate,
-        #     self.turntable, self.turntable.state, start_pos, self.turntable.position, self.squisher.position))
+        # log.info("_rotate end, goal pos %s, speed %d, must_be_accurate %s, %s is %s went %s->%s, squisher %s\n" %\
+        #     (final_turntable_pos, speed, must_be_accurate,
+        #      self.turntable, self.turntable.state, start_pos, self.turntable.position, self.squisher.position))
 
     def rotate(self, clockwise, quarter_turns, count_total_distance=False):
 
@@ -455,7 +459,7 @@ class CraneCuber3x3x3(object):
             delta_ms = ((finish - start).seconds * 1000) + ((finish - start).microseconds / 1000)
             self.time_rotate += delta_ms
 
-            log.info("rotate_cube() FREE %d quarter turns, clockwise %s), current_pos %d, turn_pos %d, square_turntable_pos %d took %dms" %
+            log.info("rotate_cube() FREE %d quarter turns, clockwise %s, current_pos %d, turn_pos %d, square_turntable_pos %d took %dms" %
                 (quarter_turns, clockwise, current_pos, turn_pos, square_turntable_pos, delta_ms))
 
         else:
@@ -796,7 +800,6 @@ class CraneCuber3x3x3(object):
                     raise Exception("4x4x4 does not have %d rows" % rows)
 
             elif self.rows_and_cols == 5:
-                # dwalton
                 if rows == 1:
                     final_pos = -153
                 elif rows == 2:
@@ -1865,26 +1868,24 @@ if __name__ == '__main__':
         sensor_port1.mode = 'ev3-analog'
         sensor_port1.set_device = 'lego-ev3-touch'
 
-
     # Uncomment to test elevate(), flip(), etc
     """
-    cc = CraneCuber5x5x5(SERVER, args.emulate, platform)
+    cc = CraneCuber2x2x2(SERVER, args.emulate, platform)
     cc.init_motors()
+    cc.elevate_max()
 
     while True:
         if cc.shutdown_event.is_set():
             break
 
-        log.info("\n\n\n\n\n\n")
+        # log.info("\n\n\n\n\n\n")
         # cc.flip()
-        # cc.elevate_max()
-        # cc.rotate(clockwise=True, quarter_turns=1)
 
-        cc.elevate(4)
+        cc.rotate(clockwise=True, quarter_turns=1)
         log.info("PAUSED")
         input("PAUSED")
 
-        cc.elevate(0)
+        cc.rotate(clockwise=False, quarter_turns=1)
         log.info("PAUSED")
         input("PAUSED")
 
